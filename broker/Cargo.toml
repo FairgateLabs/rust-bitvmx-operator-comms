@@ -1,0 +1,20 @@
+[package]
+name = "broker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies] #TODO: eliminate dependences
+thiserror = "2.0.12"
+serde = { version = "1.0", features = ["derive"] }
+tracing = "0.1.0"
+lazy_static = "1.4.0"
+serde_json = "1.0.64"
+serde_yaml = "0.9.33"
+bitvmx-broker = { path = "../../rust-bitvmx-broker", features = [
+    "storagebackend",
+] }
+rust-bitvmx-storage-backend = { path = "../../rust-bitvmx-storage-backend" }
+
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

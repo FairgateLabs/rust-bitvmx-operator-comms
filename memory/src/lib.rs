@@ -130,7 +130,7 @@ impl P2pHandler {
         peer_id: PeerId,
         address: P2PAddress,
         data: Vec<u8>,
-    ) -> Result<(), String> {
+    ) -> Result<(), P2pHandlerError> {
         // Simulate sending a request to the peer
 
         info!(
@@ -142,10 +142,79 @@ impl P2pHandler {
         Ok(())
     }
 
-    pub fn response(&self, peer_id: PeerId, data: Vec<u8>) -> Result<(), String> {
+    pub fn response(&self, peer_id: PeerId, data: Vec<u8>) -> Result<(), P2pHandlerError> {
         // Simulate sending a request to the peer
         info!("Generate request to peer: {}  {:?}", peer_id, data);
         put(self.peer_id.clone(), peer_id, data);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_request_response() {
+        tracing_subscriber::fmt()
+            .without_time()
+            .with_target(false)
+            .init();
+
+        // Hardcoded keys and addresses
+        let key1 = Keypair {
+            public_key: "peer1".to_string(),
+            private_key: "priv1".to_string(),
+        };
+        let key2 = Keypair {
+            public_key: "peer2".to_string(),
+            private_key: "priv2".to_string(),
+        };
+
+        let addr1 = "127.0.0.1:8001".to_string();
+        let addr2 = "127.0.0.1:8002".to_string();
+
+        let mut peer1 = P2pHandler::new::<()>(addr1, key1).unwrap();
+        let mut peer2 = P2pHandler::new::<()>(addr2, key2).unwrap();
+
+        let peer1_id = peer1.get_peer_id();
+        let peer2_id = peer2.get_peer_id();
+        let _peer1_address = peer1.get_address();
+        let peer2_address = peer2.get_address();
+
+        let request_data = b"hello peer2".to_vec();
+        let response_data = b"hello peer1".to_vec();
+
+        // peer1 sends request to peer2
+        peer1
+            .request(
+                peer2_id.clone(),
+                peer2_address.clone(),
+                request_data.clone(),
+            )
+            .unwrap();
+
+        // peer2 receives the request
+        match peer2.check_receive() {
+            Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
+                assert_eq!(from_id, peer1_id);
+                assert_eq!(data, request_data);
+
+                // peer2 sends a response back to peer1
+                peer2
+                    .response(from_id.clone(), response_data.clone())
+                    .unwrap();
+            }
+            _ => panic!("Peer2 expected to receive a message"),
+        }
+
+        // peer1 receives the response
+        match peer1.check_receive() {
+            Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
+                assert_eq!(from_id, peer2_id);
+                assert_eq!(data, response_data);
+            }
+            _ => panic!("Peer1 expected to receive a response"),
+        }
     }
 }
