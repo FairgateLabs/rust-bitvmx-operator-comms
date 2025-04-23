@@ -202,8 +202,8 @@ impl P2pHandler {
 
         Ok(())
     }
-    pub fn close(&mut self) {
-        self.broker.close(); //TODO: how to call?
+    pub fn stop(&mut self) -> Result<(), P2pHandlerError> {
+        Ok(self.broker.close())
     }
 }
 
@@ -286,8 +286,8 @@ mod tests {
         }
 
         // Close the brokers
-        peer1.close();
-        peer2.close();
+        peer1.stop().unwrap();
+        peer2.stop().unwrap();
     }
 
     #[test]
@@ -383,7 +383,7 @@ mod tests {
         }
 
         // Close the brokers
-        peer1.close();
-        peer2.close();
+        peer1.stop().unwrap();
+        peer2.stop().unwrap();
     }
 }
