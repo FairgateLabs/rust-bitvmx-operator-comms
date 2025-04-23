@@ -3,8 +3,15 @@ name = "p2p_handler"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+resolver = "2"
+members = ["memory", "broker"]
+
+[features]
+default = ["broker-impl"]
+memory-impl = ["memory"]
+broker-impl = ["broker"]
+
 [dependencies]
-thiserror = "2.0.12"
-serde = { version = "1.0", features = ["derive"] }
-tracing = "0.1.0"
-lazy_static = "1.4.0"
+memory = { path = "memory", optional = true }
+broker = { path = "broker", optional = true }
