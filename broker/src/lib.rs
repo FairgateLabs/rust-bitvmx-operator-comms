@@ -3,24 +3,28 @@ use bitvmx_broker::{
     channel::channel::{DualChannel, LocalChannel},
     rpc::{errors::BrokerError, sync_server::BrokerSync, BrokerConfig},
 };
+// use bitvmx_broker::broker_memstorage::MemStorage;
+use storage_backend::{error::StorageError, storage::Storage};
+
 use std::{
     net::IpAddr,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use storage_backend::{error::StorageError, storage::Storage};
 use thiserror::Error;
 use tracing::{error, info};
 
 mod helper;
 use crate::helper::{AddressParser, PeerMapper};
-
 pub use helper::{Keypair, PeerId};
+
 pub type P2PAddress = String;
 pub type LocalAllowList = String;
+
 struct Broker {
     broker: BrokerSync,
     local_channel: LocalChannel<BrokerStorage>,
+    // local_channel: LocalChannel<MemStorage>,
 }
 impl Broker {
     pub fn new(broker_port: u16, addr: Option<IpAddr>) -> Result<Self, StorageError> {
@@ -28,6 +32,7 @@ impl Broker {
         let broker_backend = Storage::new_with_path(&PathBuf::from(storage_path.clone()))?;
         let broker_backend = Arc::new(Mutex::new(broker_backend));
         let broker_storage = Arc::new(Mutex::new(BrokerStorage::new(broker_backend)));
+        // let broker_storage = Arc::new(Mutex::new(MemStorage::new()));
         let broker_config = BrokerConfig::new(broker_port, addr);
         let broker = BrokerSync::new(&broker_config, broker_storage.clone());
         let local_channel = LocalChannel::new(0, broker_storage.clone());
@@ -198,7 +203,7 @@ impl P2pHandler {
         Ok(())
     }
     pub fn close(&mut self) {
-        self.broker.close();
+        self.broker.close(); //TODO: how to call?
     }
 }
 
