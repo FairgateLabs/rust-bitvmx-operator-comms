@@ -43,6 +43,10 @@ impl Broker {
         my_id: u32,
         data: String,
     ) -> Result<(), BrokerError> {
+        info!(
+            "Initializing dual channel with address {:?} and broker port {}",
+            addr, broker_port
+        );
         let config = BrokerConfig::new(broker_port, addr);
         let channel = DualChannel::new(&config, my_id);
         channel.send(0, data.clone())?;
@@ -51,6 +55,7 @@ impl Broker {
     }
 
     pub fn get(&self) -> Result<Option<(u32, String)>, BrokerError> {
+        //sleep(std::time::Duration::from_millis(200));
         if let Some((data, id)) = self.local_channel.recv()? {
             info!("Received data {:?} from broker with id {}", data, id);
             Ok(Some((id, data)))
@@ -158,7 +163,7 @@ impl P2pHandler {
         let _id = self
             .peer_mapper
             .peer_id_to_broker_id(peer_id)
-            .map_err(P2pHandlerError::Error); // Just check if the peer_id is valid
+            .map_err(P2pHandlerError::Error)?; // Just check if the peer_id is valid
         let my_id = self
             .peer_mapper
             .peer_id_to_broker_id(self.peer_id.clone())
@@ -201,15 +206,14 @@ impl P2pHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{thread::sleep, time::Duration};
-    use tracing_subscriber;
+    //use tracing_subscriber;
 
     #[test]
     fn test_boker() {
-        tracing_subscriber::fmt()
-            .without_time()
-            .with_target(false)
-            .init();
+        // tracing_subscriber::fmt()
+        //     .without_time()
+        //     .with_target(false)
+        //     .init();
         let send_id = 1;
         let data = "hello".to_string();
         let mut broker = Broker::new(10000, None).unwrap();
@@ -221,10 +225,10 @@ mod tests {
 
     #[test]
     fn test_request_response() {
-        tracing_subscriber::fmt()
-            .without_time()
-            .with_target(false)
-            .init();
+        // tracing_subscriber::fmt()
+        //     .without_time()
+        //     .with_target(false)
+        //     .init();
 
         // Hardcoded keys and addresses
         let key1 = Keypair {
@@ -236,8 +240,8 @@ mod tests {
             private_key: "priv2".to_string(),
         };
 
-        let addr1 = "/ip4/127.0.0.1/tcp/61191".to_string();
-        let addr2 = "/ip4/127.0.0.1/tcp/61192".to_string();
+        let addr1 = "/ip4/127.0.0.1/tcp/61111".to_string();
+        let addr2 = "/ip4/127.0.0.1/tcp/61122".to_string();
 
         let mut peer1 = P2pHandler::new::<()>(addr1, key1).unwrap();
         let mut peer2 = P2pHandler::new::<()>(addr2, key2).unwrap();
@@ -289,10 +293,10 @@ mod tests {
 
     #[test]
     fn test_concurrent_requests() {
-        tracing_subscriber::fmt()
-            .without_time()
-            .with_target(false)
-            .init();
+        // tracing_subscriber::fmt()
+        //     .without_time()
+        //     .with_target(false)
+        //     .init();
 
         // Hardcoded keys and addresses
         let key1 = Keypair {
@@ -304,8 +308,8 @@ mod tests {
             private_key: "priv4".to_string(),
         };
 
-        let addr1 = "/ip4/127.0.0.1/tcp/61193".to_string();
-        let addr2 = "/ip4/127.0.0.1/tcp/61194".to_string();
+        let addr1 = "/ip4/127.0.0.1/tcp/61133".to_string();
+        let addr2 = "/ip4/127.0.0.1/tcp/61144".to_string();
 
         let mut peer1 = P2pHandler::new::<()>(addr1, key1).unwrap();
         let mut peer2 = P2pHandler::new::<()>(addr2, key2).unwrap();
@@ -352,7 +356,7 @@ mod tests {
             _ => panic!("Peer2 expected to receive a message"),
         }
 
-        // peer1 receives the request
+        //peer1 receives the request
         match peer1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer2_id);
@@ -366,25 +370,25 @@ mod tests {
             _ => panic!("Peer1 expected to receive a message"),
         }
 
-        // // peer1 receives the response
-        // match peer1.check_receive() {
-        //     Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-        //         assert_eq!(from_id, peer2_id);
-        //         assert_eq!(data, response_data_1);
-        //     }
-        //     _ => panic!("Peer1 expected to receive a response"),
-        // }
+        // peer1 receives the response
+        match peer1.check_receive() {
+            Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
+                assert_eq!(from_id, peer2_id);
+                assert_eq!(data, response_data_1);
+            }
+            _ => panic!("Peer1 expected to receive a response"),
+        }
 
-        // // peer2 receives the response
-        // match peer2.check_receive() {
-        //     Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-        //         assert_eq!(from_id, peer1_id);
-        //         assert_eq!(data, response_data_2);
-        //     }
-        //     _ => panic!("Peer2 expected to receive a response"),
-        // }
+        // peer2 receives the response
+        match peer2.check_receive() {
+            Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
+                assert_eq!(from_id, peer1_id);
+                assert_eq!(data, response_data_2);
+            }
+            _ => panic!("Peer2 expected to receive a response"),
+        }
 
-        // // Close the brokers
+        // Close the brokers
         peer1.close();
         peer2.close();
     }

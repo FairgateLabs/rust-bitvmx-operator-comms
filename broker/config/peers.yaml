@@ -1,15 +1,15 @@
 - peer_id: peer1
   broker_id: 1
-  address: /ip4/127.0.0.1/tcp/61191
+  address: /ip4/127.0.0.1/tcp/61111
 
 - peer_id: peer2
   broker_id: 2
-  address: /ip4/127.0.0.1/tcp/61192
+  address: /ip4/127.0.0.1/tcp/61122
 
 - peer_id: peer3
   broker_id: 3
-  address: /ip4/127.0.0.1/tcp/61193
+  address: /ip4/127.0.0.1/tcp/61133
 
 - peer_id: peer4
   broker_id: 4
-  address: /ip4/127.0.0.1/tcp/61194
+  address: /ip4/127.0.0.1/tcp/61144
