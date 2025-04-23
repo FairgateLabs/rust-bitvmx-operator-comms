@@ -1,15 +1,15 @@
-- peer_id: peer1
+- key: 080112408888ee9eac838c47e3a17f354f30477357a7f6b63a6ceabe70f821ae76bcd461f87ef7c8f92b9486d8c82e25738cdf643311c700e25e0d105eff81b497f5abeb
   broker_id: 1
-  address: /ip4/127.0.0.1/tcp/61111
+  address: /ip4/127.0.0.1/tcp/61180
 
-- peer_id: peer2
+- key: 080112406e52d71640c7c226a09da3d4f4299eadd636cb375037e34fcbbe2c8e93577ea82550385621b3f807ba79dc93725f50bca4dc2eee215e95dc9ef863dcfcf4bc1b
   broker_id: 2
-  address: /ip4/127.0.0.1/tcp/61122
+  address: /ip4/127.0.0.1/tcp/61181
 
-- peer_id: peer3
+- key: 0801124098a7c8db342852696d63dd2be8db3d46d16180fd10429f8bdcdc25e299e44223cb449d3daa2efcb84541670187d2163d76cfd0e8f1c3fdad34163882ee0f2240
   broker_id: 3
-  address: /ip4/127.0.0.1/tcp/61133
+  address: /ip4/127.0.0.1/tcp/61182
 
-- peer_id: peer4
+- key: 08011240fe31227bdbfe5555501e9724e32cf705d1852fc02accdee893ee5c1fcac93f9da8c8dc95334fde96b323decafe3261b7e657ce62630ed1e54a34409e8915a73a
   broker_id: 4
-  address: /ip4/127.0.0.1/tcp/61144
+  address: /ip4/127.0.0.1/tcp/61183

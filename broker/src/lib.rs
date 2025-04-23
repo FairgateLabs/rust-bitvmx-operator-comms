@@ -13,18 +13,18 @@ use thiserror::Error;
 use tracing::{error, info};
 
 mod helper;
-use crate::helper::{AddressParser, Keypair, PeerId, PeerMapper};
+use crate::helper::{AddressParser, PeerMapper};
 
+pub use helper::{Keypair, PeerId};
 pub type P2PAddress = String;
 pub type LocalAllowList = String;
-
 struct Broker {
     broker: BrokerSync,
     local_channel: LocalChannel<BrokerStorage>,
 }
 impl Broker {
     pub fn new(broker_port: u16, addr: Option<IpAddr>) -> Result<Self, StorageError> {
-        let storage_path = format!("/tmp/p2p_broker_{}", broker_port);
+        let storage_path = format!("/tmp/broker_p2p_{}", broker_port);
         let broker_backend = Storage::new_with_path(&PathBuf::from(storage_path.clone()))?;
         let broker_backend = Arc::new(Mutex::new(broker_backend));
         let broker_storage = Arc::new(Mutex::new(BrokerStorage::new(broker_backend)));
@@ -43,10 +43,6 @@ impl Broker {
         my_id: u32,
         data: String,
     ) -> Result<(), BrokerError> {
-        info!(
-            "Initializing dual channel with address {:?} and broker port {}",
-            addr, broker_port
-        );
         let config = BrokerConfig::new(broker_port, addr);
         let channel = DualChannel::new(&config, my_id);
         channel.send(0, data.clone())?;
@@ -60,7 +56,7 @@ impl Broker {
             info!("Received data {:?} from broker with id {}", data, id);
             Ok(Some((id, data)))
         } else {
-            info!("No data received from broker");
+            //info!("No data received from broker");
             Ok(None)
         }
     }
@@ -98,9 +94,11 @@ impl P2pHandler {
             .map_err(|_| P2pHandlerError::Error("Invalid address".to_string()))?;
         let broker = Broker::new(port, Some(ip))
             .map_err(|e| P2pHandlerError::Error(format!("Failed to create broker: {}", e)))?;
-        let peer_mapper = PeerMapper::new("config/peers.yaml");
+        let base_path = env!("CARGO_MANIFEST_DIR"); // The directory with this crate's Cargo.toml
+        let config_path = format!("{}/config/peers.yaml", base_path);
+        let peer_mapper = PeerMapper::new(&config_path).map_err(P2pHandlerError::Error)?;
         Ok(P2pHandler {
-            peer_id: PeerId(key.public_key),
+            peer_id: PeerId(key.public_key.to_string()),
             address: addr,
             broker,
             peer_mapper,
@@ -134,7 +132,8 @@ impl P2pHandler {
         {
             Some((id, data)) => match self.peer_mapper.broker_id_to_peer_id(id as u16) {
                 Ok(peer_id) => {
-                    let data = serde_json::from_str::<Vec<u8>>(&data).unwrap();
+                    let data = serde_json::from_str::<Vec<u8>>(&data)
+                        .map_err(|e| P2pHandlerError::Error(e.to_string()))?;
                     info!("Receive data from peer: {}: {:?}", peer_id, data);
                     Ok(Some(ReceiveHandlerChannel::Msg(peer_id, data)))
                 }
@@ -231,17 +230,12 @@ mod tests {
         //     .init();
 
         // Hardcoded keys and addresses
-        let key1 = Keypair {
-            public_key: "peer1".to_string(),
-            private_key: "priv1".to_string(),
-        };
-        let key2 = Keypair {
-            public_key: "peer2".to_string(),
-            private_key: "priv2".to_string(),
-        };
-
-        let addr1 = "/ip4/127.0.0.1/tcp/61111".to_string();
-        let addr2 = "/ip4/127.0.0.1/tcp/61122".to_string();
+        let key1= "080112408888ee9eac838c47e3a17f354f30477357a7f6b63a6ceabe70f821ae76bcd461f87ef7c8f92b9486d8c82e25738cdf643311c700e25e0d105eff81b497f5abeb".to_string();
+        let key1 = Keypair::from_protobuf_encoding(&hex::decode(key1.as_bytes()).unwrap()).unwrap();
+        let key2= "080112406e52d71640c7c226a09da3d4f4299eadd636cb375037e34fcbbe2c8e93577ea82550385621b3f807ba79dc93725f50bca4dc2eee215e95dc9ef863dcfcf4bc1b".to_string();
+        let key2 = Keypair::from_protobuf_encoding(&hex::decode(key2.as_bytes()).unwrap()).unwrap();
+        let addr1 = "/ip4/127.0.0.1/tcp/61180".to_string();
+        let addr2 = "/ip4/127.0.0.1/tcp/61181".to_string();
 
         let mut peer1 = P2pHandler::new::<()>(addr1, key1).unwrap();
         let mut peer2 = P2pHandler::new::<()>(addr2, key2).unwrap();
@@ -299,17 +293,12 @@ mod tests {
         //     .init();
 
         // Hardcoded keys and addresses
-        let key1 = Keypair {
-            public_key: "peer3".to_string(),
-            private_key: "priv3".to_string(),
-        };
-        let key2 = Keypair {
-            public_key: "peer4".to_string(),
-            private_key: "priv4".to_string(),
-        };
-
-        let addr1 = "/ip4/127.0.0.1/tcp/61133".to_string();
-        let addr2 = "/ip4/127.0.0.1/tcp/61144".to_string();
+        let key1= "0801124098a7c8db342852696d63dd2be8db3d46d16180fd10429f8bdcdc25e299e44223cb449d3daa2efcb84541670187d2163d76cfd0e8f1c3fdad34163882ee0f2240".to_string();
+        let key1 = Keypair::from_protobuf_encoding(&hex::decode(key1.as_bytes()).unwrap()).unwrap();
+        let key2= "08011240fe31227bdbfe5555501e9724e32cf705d1852fc02accdee893ee5c1fcac93f9da8c8dc95334fde96b323decafe3261b7e657ce62630ed1e54a34409e8915a73a".to_string();
+        let key2 = Keypair::from_protobuf_encoding(&hex::decode(key2.as_bytes()).unwrap()).unwrap();
+        let addr1 = "/ip4/127.0.0.1/tcp/61182".to_string();
+        let addr2 = "/ip4/127.0.0.1/tcp/61183".to_string();
 
         let mut peer1 = P2pHandler::new::<()>(addr1, key1).unwrap();
         let mut peer2 = P2pHandler::new::<()>(addr2, key2).unwrap();

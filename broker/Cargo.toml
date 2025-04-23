@@ -3,13 +3,13 @@ name = "broker"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies] #TODO: eliminate dependences
+[dependencies]
 thiserror = "2.0.12"
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1.0"
-lazy_static = "1.4.0"
 serde_json = "1.0.64"
 serde_yaml = "0.9.33"
+hex = "0.4.3"
 bitvmx-broker = { path = "../../rust-bitvmx-broker", features = [
     "storagebackend",
 ] }

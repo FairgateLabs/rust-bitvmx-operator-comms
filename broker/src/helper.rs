@@ -24,15 +24,39 @@ struct PeerInfo {
     address: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct PeerInfoYaml {
+    key: String,
+    broker_id: u16,
+    address: String,
+}
+
 pub struct PeerMapper {
     peers: Vec<PeerInfo>,
 }
 
 impl PeerMapper {
-    pub fn new(path: &str) -> Self {
-        let content = fs::read_to_string(path).expect("Cannot read file");
-        let peers: Vec<PeerInfo> = serde_yaml::from_str(&content).expect("YAML is invalid");
-        PeerMapper { peers }
+    pub fn new(path: &str) -> Result<Self, String> {
+        let content = fs::read_to_string(path).map_err(|e| format!("Cannot read file: {}", e))?;
+        let yaml_peers: Vec<PeerInfoYaml> =
+            serde_yaml::from_str(&content).map_err(|e| format!("YAML is invalid: {}", e))?;
+
+        let peers: Vec<PeerInfo> = yaml_peers
+            .into_iter()
+            .map(|yaml| -> Result<PeerInfo, String> {
+                let key_bytes =
+                    hex::decode(&yaml.key).map_err(|e| format!("Failed to decode key: {}", e))?;
+                let keypair = Keypair::from_protobuf_encoding(&key_bytes)
+                    .map_err(|e| format!("Failed to create keypair: {}", e))?;
+                Ok(PeerInfo {
+                    peer_id: PeerId(keypair.public_key),
+                    broker_id: yaml.broker_id,
+                    address: yaml.address,
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(PeerMapper { peers })
     }
 
     pub fn peer_id_to_broker_id(&self, peer_id: PeerId) -> Result<u16, String> {
