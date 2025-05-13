@@ -4,11 +4,10 @@ use bitvmx_broker::{
     rpc::{errors::BrokerError, sync_server::BrokerSync, BrokerConfig},
 };
 // use bitvmx_broker::broker_memstorage::MemStorage;
-use storage_backend::{error::StorageError, storage::Storage};
+use storage_backend::{error::StorageError, storage::Storage, storage_config::StorageConfig};
 
 use std::{
     net::IpAddr,
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
@@ -29,7 +28,8 @@ struct Broker {
 impl Broker {
     pub fn new(broker_port: u16, addr: Option<IpAddr>) -> Result<Self, StorageError> {
         let storage_path = format!("/tmp/broker_p2p_{}", broker_port);
-        let broker_backend = Storage::new_with_path(&PathBuf::from(storage_path.clone()))?;
+        let config = StorageConfig::new(storage_path.clone(), None);
+        let broker_backend = Storage::new(&config)?;
         let broker_backend = Arc::new(Mutex::new(broker_backend));
         let broker_storage = Arc::new(Mutex::new(BrokerStorage::new(broker_backend)));
         // let broker_storage = Arc::new(Mutex::new(MemStorage::new()));
