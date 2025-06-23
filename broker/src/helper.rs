@@ -84,7 +84,7 @@ impl PeerMapper {
     }
 }
 
-#[derive(Clone, Hash, Default, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Hash, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct PeerId(pub String);
 
 impl PeerId {
