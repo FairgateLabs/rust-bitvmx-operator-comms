@@ -8,7 +8,7 @@ compile_error!("You must enable either the `memory-impl` or `broker-impl` featur
 
 // --- Conditional exports ---
 #[cfg(feature = "memory-impl")]
-pub use memory::*;
+pub use ::memory::*;
 
 #[cfg(feature = "broker-impl")]
-pub use broker::*;
+pub use ::broker::*;
