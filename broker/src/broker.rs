@@ -1,4 +1,5 @@
 use bitvmx_broker::{
+    allow_list::Identifier,
     broker_storage::BrokerStorage,
     channel::channel::{DualChannel, LocalChannel},
     rpc::{errors::BrokerError, sync_server::BrokerSync, tls_helper::Cert, BrokerConfig},
@@ -37,14 +38,20 @@ impl Broker {
 
         let cert = Cert::new_with_privk(privk)?;
         let pubk_hash = cert.get_pubk_hash()?;
-        let broker_config = BrokerConfig::new(broker_port, addr, pubk_hash.clone())?;
+        let broker_config = BrokerConfig::new(broker_port, addr, pubk_hash.clone(), None)?;
         let broker = BrokerSync::new(
             &broker_config,
             broker_storage.clone(),
             cert.clone(),
             allow_list.get_allow_list(),
         );
-        let local_channel = LocalChannel::new(pubk_hash.clone(), broker_storage.clone());
+        let local_channel = LocalChannel::new(
+            Identifier {
+                pubkey_hash: pubk_hash.clone(),
+                id: 0,
+            },
+            broker_storage.clone(),
+        );
 
         Ok(Self {
             broker,
@@ -62,10 +69,11 @@ impl Broker {
         data: String,
     ) -> Result<(), BrokerError> {
         // It doesnt check address when sending data, only when receiving //TODO: is this ok?
-        let server_config = BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone())?;
+        let server_config = BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone(), None)?;
         let channel = DualChannel::new(
             &server_config,
             self.cert.clone(),
+            None,
             self.allow_list.get_allow_list(),
         )?;
         channel.send(None, data.clone())?;
@@ -74,9 +82,17 @@ impl Broker {
     }
 
     pub fn get(&self) -> Result<Option<(String, String)>, BrokerError> {
-        if let Some((data, id)) = self.local_channel.recv()? {
-            info!("Received data {:?} from broker with id {}", data, id);
-            Ok(Some((id, data)))
+        if let Some((data, identifier)) = self.local_channel.recv()? {
+            info!(
+                "Received data {:?} from broker with id {}",
+                data, identifier
+            );
+            if identifier.id != 0 {
+                return Err(BrokerError::InvalidIdentifier(
+                    "Received data from non-local broker".to_string(),
+                ));
+            }
+            Ok(Some((identifier.pubkey_hash, data)))
         } else {
             Ok(None)
         }

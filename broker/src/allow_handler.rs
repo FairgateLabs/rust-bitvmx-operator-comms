@@ -32,10 +32,10 @@ impl AllowHandler {
         self.allow_list
             .lock()
             .map_err(|e| anyhow::Error::msg(e.to_string()))?
-            .add(pubk_hash, ip);
+            .add(pubk_hash, None, ip);
         Ok(())
     }
     pub fn remove(&mut self, pubk_hash: &str) {
-        self.allow_list.lock().unwrap().remove(pubk_hash);
+        self.allow_list.lock().unwrap().remove(pubk_hash, None);
     }
 }

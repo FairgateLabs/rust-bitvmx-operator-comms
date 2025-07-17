@@ -338,7 +338,8 @@ mod tests {
         // Simulate a reconnect by closing and reopening the broker
         p2p1.stop().unwrap();
         sleep(Duration::from_millis(500)); // Wait for the broker to close
-        p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
+
+        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
 
         // Check if we can still send messages after reconnecting
         p2p1.send(&peer2.pubk_hash, peer2.address, data.clone())
