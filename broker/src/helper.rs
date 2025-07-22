@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
+use tracing::debug;
+use std::fs::File;
+use std::io::BufReader;
 use std::{fmt::Display, fs, net::IpAddr, str::FromStr};
+use x509_parser::{parse_x509_certificate, pem::Pem};
 
 pub struct AddressParser;
 
@@ -41,15 +45,17 @@ impl PeerMapper {
         let yaml_peers: Vec<PeerInfoYaml> =
             serde_yaml::from_str(&content).map_err(|e| format!("YAML is invalid: {}", e))?;
 
+        // Get the directory of the YAML file as p2p peer pem path is relative to the yaml file
+        let yaml_dir = std::path::Path::new(path).parent().unwrap_or(std::path::Path::new("."));
+
         let peers: Vec<PeerInfo> = yaml_peers
             .into_iter()
             .map(|yaml| -> Result<PeerInfo, String> {
-                let key_bytes =
-                    hex::decode(&yaml.key).map_err(|e| format!("Failed to decode key: {}", e))?;
-                let keypair = Keypair::from_protobuf_encoding(&key_bytes)
-                    .map_err(|e| format!("Failed to create keypair: {}", e))?;
+                let pem_path = yaml_dir.join(&yaml.key);
+                debug!("Resolved p2p PEM path: {}", pem_path.display());
+                let peer_id = PeerId::from_pem_file(pem_path.to_str().unwrap())?;
                 Ok(PeerInfo {
-                    peer_id: PeerId(keypair.public_key),
+                    peer_id,
                     broker_id: yaml.broker_id,
                     address: yaml.address,
                 })
@@ -93,6 +99,21 @@ impl PeerId {
         //format!("{}", self.0)
         self.0.clone()
     }
+    pub fn from_pem_file(path: &str) -> Result<Self, String> {
+        let pem_file = File::open(path).map_err(|e| format!("Cannot read file: {}", e))?;
+        // Parse the PEM block
+        let (pem, _) = Pem::read(BufReader::new(pem_file)).map_err(|e| format!("PEM parse error: {:?}", e))?;
+            // Parse the X.509 certificate
+        let (_, cert) = parse_x509_certificate(&pem.contents)
+        .map_err(|e| format!("X509 parse error: {:?}", e))?;
+        // Extract the public key in DER format
+        let pubkey_der = cert.public_key().raw.to_vec();
+        Ok(PeerId::from_der(pubkey_der))
+    }
+
+    pub fn from_der(public_key_der: Vec<u8>) -> Self {
+        PeerId(hex::encode(public_key_der))
+    }
 }
 
 impl Display for PeerId {
@@ -107,27 +128,5 @@ impl FromStr for PeerId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         //let id = s.parse::<u64>()?;
         Ok(PeerId(s.to_string()))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Keypair {
-    pub public_key: String,
-    pub private_key: String,
-}
-
-impl Keypair {
-    pub fn from_protobuf_encoding(data: &[u8]) -> Result<Self, String> {
-        // Simulate decoding from protobuf
-        if data.is_empty() {
-            return Err("Invalid data".to_string());
-        }
-
-        let mut reverse = data.to_vec();
-        reverse.reverse();
-        Ok(Keypair {
-            public_key: format!("{:?}", data).to_string(),
-            private_key: format!("{:?}", reverse).to_string(),
-        })
     }
 }

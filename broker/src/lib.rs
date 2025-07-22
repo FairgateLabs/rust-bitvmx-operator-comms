@@ -15,7 +15,7 @@ use tracing::{error, info};
 
 mod helper;
 use crate::helper::{AddressParser, PeerMapper};
-pub use helper::{Keypair, PeerId};
+pub use helper::PeerId;
 
 pub type P2PAddress = String;
 pub type LocalAllowList = String;
@@ -94,7 +94,7 @@ pub enum ReceiveHandlerChannel {
 }
 
 impl P2pHandler {
-    pub fn new<T: Default>(addr: String, key: Keypair) -> Result<Self, P2pHandlerError> {
+    pub fn new<T: Default>(addr: String, public_key: Vec<u8>) -> Result<Self, P2pHandlerError> {
         let (ip, port) = AddressParser::parse(&addr)
             .map_err(|_| P2pHandlerError::Error("Invalid address".to_string()))?;
         let broker = Broker::new(port, Some(ip))
@@ -103,7 +103,7 @@ impl P2pHandler {
         let config_path = format!("{}/config/peers.yaml", base_path);
         let peer_mapper = PeerMapper::new(&config_path).map_err(P2pHandlerError::Error)?;
         Ok(P2pHandler {
-            peer_id: PeerId(key.public_key.to_string()),
+            peer_id: PeerId::from_der(public_key),
             address: addr,
             broker,
             peer_mapper,
@@ -209,6 +209,9 @@ impl P2pHandler {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::io::BufReader;
+    use x509_parser::{parse_x509_certificate, pem::Pem};
     use super::*;
     //use tracing_subscriber;
 
@@ -227,6 +230,13 @@ mod tests {
         broker.close();
     }
 
+    fn get_key_from_pem(pem_file: &str) -> Vec<u8> {
+        let pem_file = File::open(pem_file).unwrap();
+        let (pem, _) = Pem::read(BufReader::new(pem_file)).unwrap();
+        let (_, cert) = parse_x509_certificate(&pem.contents).unwrap();
+        return cert.public_key().raw.to_vec()
+    }
+    
     #[test]
     fn test_request_response() {
         // tracing_subscriber::fmt()
@@ -235,15 +245,13 @@ mod tests {
         //     .init();
 
         // Hardcoded keys and addresses
-        let key1= "080112408888ee9eac838c47e3a17f354f30477357a7f6b63a6ceabe70f821ae76bcd461f87ef7c8f92b9486d8c82e25738cdf643311c700e25e0d105eff81b497f5abeb".to_string();
-        let key1 = Keypair::from_protobuf_encoding(&hex::decode(key1.as_bytes()).unwrap()).unwrap();
-        let key2= "080112406e52d71640c7c226a09da3d4f4299eadd636cb375037e34fcbbe2c8e93577ea82550385621b3f807ba79dc93725f50bca4dc2eee215e95dc9ef863dcfcf4bc1b".to_string();
-        let key2 = Keypair::from_protobuf_encoding(&hex::decode(key2.as_bytes()).unwrap()).unwrap();
+        let key1_der = get_key_from_pem("op_1.pem");
+        let key2_der = get_key_from_pem("op_2.pem");
         let addr1 = "/ip4/127.0.0.1/tcp/61180".to_string();
         let addr2 = "/ip4/127.0.0.1/tcp/61181".to_string();
 
-        let mut peer1 = P2pHandler::new::<()>(addr1, key1).unwrap();
-        let mut peer2 = P2pHandler::new::<()>(addr2, key2).unwrap();
+        let mut peer1 = P2pHandler::new::<()>(addr1, key1_der).unwrap();
+        let mut peer2 = P2pHandler::new::<()>(addr2, key2_der).unwrap();
 
         let peer1_id = peer1.get_peer_id();
         let peer2_id = peer2.get_peer_id();
@@ -298,15 +306,13 @@ mod tests {
         //     .init();
 
         // Hardcoded keys and addresses
-        let key1= "0801124098a7c8db342852696d63dd2be8db3d46d16180fd10429f8bdcdc25e299e44223cb449d3daa2efcb84541670187d2163d76cfd0e8f1c3fdad34163882ee0f2240".to_string();
-        let key1 = Keypair::from_protobuf_encoding(&hex::decode(key1.as_bytes()).unwrap()).unwrap();
-        let key2= "08011240fe31227bdbfe5555501e9724e32cf705d1852fc02accdee893ee5c1fcac93f9da8c8dc95334fde96b323decafe3261b7e657ce62630ed1e54a34409e8915a73a".to_string();
-        let key2 = Keypair::from_protobuf_encoding(&hex::decode(key2.as_bytes()).unwrap()).unwrap();
+        let key1_der = get_key_from_pem("op_1.pem");
+        let key2_der = get_key_from_pem("op_2.pem");
         let addr1 = "/ip4/127.0.0.1/tcp/61182".to_string();
         let addr2 = "/ip4/127.0.0.1/tcp/61183".to_string();
 
-        let mut peer1 = P2pHandler::new::<()>(addr1, key1).unwrap();
-        let mut peer2 = P2pHandler::new::<()>(addr2, key2).unwrap();
+        let mut peer1 = P2pHandler::new::<()>(addr1, key1_der).unwrap();
+        let mut peer2 = P2pHandler::new::<()>(addr2, key2_der).unwrap();
         let peer1_id = peer1.get_peer_id();
         let peer2_id = peer2.get_peer_id();
 
