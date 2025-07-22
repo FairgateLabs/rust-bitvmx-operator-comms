@@ -1,3 +1,9 @@
+use broker::{
+    p2p_handler::P2pHandler as AuxHandler,
+    p2p_handler::{AllowList, RoutingTable},
+};
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Display,
@@ -5,10 +11,6 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex},
 };
-
-use broker::{allow_handler::AllowHandler, p2p_handler::P2pHandler as AuxHandler};
-use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info;
 //feature in memmory
@@ -98,7 +100,7 @@ impl P2pHandler {
     pub fn new(
         address: SocketAddr,
         privk: &str, // DER format
-        _allow_list: AllowHandler,
+        _allow_list: Arc<Mutex<AllowList>>,
     ) -> Result<Self, P2pHandlerError> {
         Ok(P2pHandler {
             pubk_hash: AuxHandler::get_pubk_hash_from_privk(privk)
@@ -169,11 +171,17 @@ mod tests {
 
         let (port1, port2) = (10002, 10003);
         let (peer1, peer2) = get_info(port1, port2);
-        let mut allow_list = AllowHandler::new();
+        let allow_list = AllowList::new();
         let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
         let mut p2p2 = P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
-        allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
-        allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
+        allow_list
+            .lock()
+            .unwrap()
+            .add(peer1.pubk_hash.clone(), peer1.address.ip());
+        allow_list
+            .lock()
+            .unwrap()
+            .add(peer2.pubk_hash.clone(), peer2.address.ip());
         let request_data = b"hello peer2".to_vec();
         let response_data = b"hello peer1".to_vec();
 

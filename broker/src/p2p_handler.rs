@@ -1,12 +1,13 @@
-use crate::allow_handler::AllowHandler;
 use crate::broker::Broker;
 use crate::helper::*;
-use bitvmx_broker::{routing::RoutingTable, rpc::tls_helper::get_pubk_hash_from_privk};
+use bitvmx_broker::rpc::tls_helper::get_pubk_hash_from_privk;
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
 use tracing::{error, info};
+
+pub use bitvmx_broker::identification::{allow_list::AllowList, routing::RoutingTable};
 
 pub struct P2pHandler {
     broker: Broker,
@@ -16,7 +17,7 @@ impl P2pHandler {
     pub fn new(
         address: SocketAddr,
         privk: &str, // DER format
-        allow_list: AllowHandler,
+        allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
     ) -> Result<Self, P2pHandlerError> {
         let broker = Broker::new(
@@ -101,6 +102,7 @@ mod tests {
         fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter,
     };
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
     struct PeerInfo {
         privk: String,
         pubk_hash: String,
@@ -124,13 +126,21 @@ mod tests {
         let privk2 = "308204bc020100300d06092a864886f70d0101010500048204a6308204a20201000282010100b6ae502944279e82b34c4beb10f67dba10cd25fae819210acc8ed4e3d4a814e5aee3b00c688ebe843b47f766427e8c66dcb1136128b5a8ea44f16116cf8cc84cbb55f2f0c59b0ec1a1ce99b2bcd9f32743a1e24dcc43c6182c43d3584b0a357ed716d19d2a1b18d5028d11f301ae0615a5e1dceaa309985353d31f1421f9767b7fe811f2138af51d9034619585561d6384fc58998af1d75ce7b7b54f814973823b9f79e9889bd7cf3c6d7ef05b722bdf7b54f69d38123f4f7425b49681b996738374ee680a8ae445393ca20c1818fb89be340716ff9d6c15d0aff5e16d1f11f0bd8df540b8ed5c340c4e636ce642ee10aeb8e0059f7c16cfca024ed3970272e3020301000102820100451805faadabfc807bb742499cc756034f828038779bb58b23966c3fe5b952fa125d4cc34cb29cad5fcc96eea6fcbd36d486e7090b00366cb0f9c8da7b52c899790b8790f8746eaedef7c8db3921881d942f80ec22f38953b03e510be689ec74d67e6b76b1abc10723e95e5e16870f07161028e1d81b737124d5c7bdf221abe5637b043d7fbe753db1314056ef65c072ad36f256347eed583548dea9c6acaec60d4241c3b68c4eb5ff9395753765ffa5e1f6b059730934915d54f8c1526f91b8583acf42908bd55980bfde2d692515eb0ca311fe36e3a1e2dc0a52714a708531a48bfd52050c679cb62a784fbc35ccbf91cbdd624acc8ce6b95160dd3f17226102818100dca5d1aa43ad9871ad3775c4452e698d68191bad9734675c7bd4e8ee9c1ff1c05d1d3927fec729c3868784c59f816acbb355e5041af8465df0aa708253cea1fbfb4b11d0f4436f8c2eae5782bb0285911d65ac8588845e96f36344ea68359f504aff170960329d7a0e95a0c35541f53fbb4163456e8d8dc610ac149ea2131f0302818100d3f33b1dd06ee417cd69ef8f2d17ddcdd80155262bebf9e597fac7aed9d93577fbde150c93ad98cb0ceb5f854e1e224f376c0f4f1f168447af3ca328971b7fc4dc98c447a5cf8296ed72c3610e5d3ddd36647a25cc9d0f4451264ee81620075b02e4872f10a86563d5764e765b1a4bcd23bea231489ec43e8db219fa4ba0a6a102818001b1881d6d6d8ca8fab25d46075de6d37e040b5156c2c1345582f9d2b3020fc1f13503364a5f4ef3c039940c4c401b08bb34a2905880a5519d4241a0ce71dc8e698c56f3aa9c45e3e68bd2021fdb52191e07a4be55a0e674f42343e924a99cb26a10f1255246b12cb9a5ee58f17393254d13a0666d05cb1bc50efd0d86a2ecef028180244a100421cceac6dc87d7d986da00431f49d31f6f03bf4cbd41d5f0ad221092939049c05684b1958a87be5a1faeef26eb115869aea3f75022c3da17b80fa047bf917481e3f4eca214d3c27a1ab082481ee90334f79ca8a184d76f4933889659d1dbf8fd68f7bc2c64bf15de13e923b362fc5fdeda553cba8d1e426e6586832102818016df4e6d5dca014855917b6e9e7fcd82cf8e766c89ca1ade85205bd7ef465545367ec9139ff828a35076eadfd25a0f81cb31f44fa02bb2c6d21e2bf80fab52ca0a8f46b0864f0c2be5233a7d5c8911e0cb5ea51415be4da46235a08762d579b252b7a96470758257d320afa6d12eb8708108b49c4cf5140e94800a855c48ec44";
         (PeerInfo::new(privk1, port1), PeerInfo::new(privk2, port2))
     }
+    fn add_allow_list(allow_list: Arc<Mutex<AllowList>>, peers: Vec<PeerInfo>) {
+        for peer in peers {
+            allow_list
+                .lock()
+                .unwrap()
+                .add(peer.pubk_hash, peer.address.ip());
+        }
+    }
     #[test]
     fn test_boker() {
         init_tracing().unwrap();
         let data = "hello".to_string();
         let (port1, port2) = (10000, 10001);
         let (peer1, peer2) = get_info(port1, port2);
-        let mut allow_list = AllowHandler::new();
+        let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
         let mut broker1 = Broker::new(
@@ -143,8 +153,7 @@ mod tests {
         .unwrap();
         let mut broker2 =
             Broker::new(port2, None, &peer2.privk, allow_list.clone(), routing).unwrap();
-        allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
-        allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
+        add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         broker1
             .put(port2, None, peer2.pubk_hash, data.clone())
@@ -159,7 +168,7 @@ mod tests {
     fn test_request_response() {
         let (port1, port2) = (10002, 10003);
         let (peer1, peer2) = get_info(port1, port2);
-        let mut allow_list = AllowHandler::new();
+        let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
         let mut p2p1 = P2pHandler::new(
@@ -171,8 +180,7 @@ mod tests {
         .unwrap();
         let mut p2p2 =
             P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
-        allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
-        allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
+        add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
         let request_data = b"hello peer2".to_vec();
         let response_data = b"hello peer1".to_vec();
 
@@ -211,7 +219,7 @@ mod tests {
     fn test_concurrent_requests() {
         let (port1, port2) = (10004, 10005);
         let (peer1, peer2) = get_info(port1, port2);
-        let mut allow_list = AllowHandler::new();
+        let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
         let mut p2p1 = P2pHandler::new(
@@ -223,8 +231,7 @@ mod tests {
         .unwrap();
         let mut p2p2 =
             P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
-        allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
-        allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
+        add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         let request_data_1 = b"hello peer2".to_vec();
         let response_data_1 = b"hello peer1".to_vec();
@@ -292,7 +299,7 @@ mod tests {
     fn test_channel() {
         let (port1, port2) = (10006, 10007);
         let (peer1, peer2) = get_info(port1, port2);
-        let mut allow_list = AllowHandler::new();
+        let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
         let mut p2p1 = P2pHandler::new(
@@ -304,8 +311,7 @@ mod tests {
         .unwrap();
         let mut p2p2 =
             P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
-        allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
-        allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
+        add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         let data = b"hello peer2".to_vec();
         p2p1.send(&peer2.pubk_hash, peer2.address, data.clone())
@@ -326,7 +332,7 @@ mod tests {
     fn test_allow_list() {
         let (port1, port2) = (10008, 10009);
         let (peer1, peer2) = get_info(port1, port2);
-        let mut allow_list = AllowHandler::new();
+        let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
         let mut p2p1 = P2pHandler::new(
@@ -338,7 +344,7 @@ mod tests {
         .unwrap();
         let mut p2p2 =
             P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
-        allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
+        add_allow_list(allow_list.clone(), vec![peer1.clone()]);
 
         let result = p2p1.send(&peer2.pubk_hash, peer2.address, b"hello peer2".to_vec());
         assert!(matches!(result, Err(P2pHandlerError::BrokerError(_))));
@@ -347,7 +353,8 @@ mod tests {
         assert!(p2p1.check_receive().is_none());
         assert!(p2p2.check_receive().is_none());
 
-        allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
+        add_allow_list(allow_list.clone(), vec![peer2.clone()]);
+
         p2p1.send(&peer2.pubk_hash, peer2.address, b"hello peer2".to_vec())
             .unwrap();
         assert_eq!(
@@ -367,7 +374,7 @@ mod tests {
     fn test_reconnecting() {
         let (port1, port2) = (10010, 10011);
         let (peer1, peer2) = get_info(port1, port2);
-        let mut allow_list = AllowHandler::new();
+        let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
         let mut p2p1 = P2pHandler::new(
@@ -384,8 +391,7 @@ mod tests {
             routing.clone(),
         )
         .unwrap();
-        allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
-        allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
+        add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         let data = b"hello peer2".to_vec();
 

@@ -1,12 +1,10 @@
 use bitvmx_broker::{
-    allow_list::Identifier,
     broker_storage::BrokerStorage,
     channel::channel::{DualChannel, LocalChannel},
-    routing::RoutingTable,
+    identification::{allow_list::AllowList, identifier::Identifier, routing::RoutingTable},
     rpc::{errors::BrokerError, sync_server::BrokerSync, tls_helper::Cert, BrokerConfig},
 };
 // use bitvmx_broker::broker_memstorage::MemStorage;
-use crate::allow_handler::AllowHandler;
 use std::{
     net::IpAddr,
     sync::{Arc, Mutex},
@@ -19,7 +17,7 @@ pub struct Broker {
     local_channel: Option<LocalChannel<BrokerStorage>>,
     // local_channel: LocalChannel<MemStorage>,
     cert: Cert,
-    allow_list: AllowHandler,
+    allow_list: Arc<Mutex<AllowList>>,
 }
 
 impl Broker {
@@ -27,7 +25,7 @@ impl Broker {
         broker_port: u16,
         addr: Option<IpAddr>,
         privk: &str, // DER format
-        allow_list: AllowHandler,
+        allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
     ) -> Result<Self, BrokerError> {
         let storage_path = format!("/tmp/broker_p2p_{}", broker_port);
@@ -43,13 +41,13 @@ impl Broker {
             &broker_config,
             broker_storage.clone(),
             cert.clone(),
-            allow_list.get_allow_list(),
+            allow_list.clone(),
             routing,
         );
         let local_channel = LocalChannel::new(
             Identifier {
                 pubkey_hash: pubk_hash.clone(),
-                id: 0,
+                id: Some(0),
             },
             broker_storage.clone(),
         );
@@ -75,7 +73,7 @@ impl Broker {
             &server_config,
             self.cert.clone(),
             None,
-            self.allow_list.get_allow_list(),
+            self.allow_list.clone(),
         )?;
         channel.send(None, data.clone())?;
         info!("Send data {:?} to broker with id {}", data, dest_pubk_hash);
@@ -90,7 +88,7 @@ impl Broker {
                         "Received data {:?} from broker with id {}",
                         data, identifier
                     );
-                    if identifier.id != 0 {
+                    if identifier.id != Some(0) {
                         return Err(BrokerError::InvalidIdentifier(
                             "Received data from non-local broker".to_string(),
                         ));
