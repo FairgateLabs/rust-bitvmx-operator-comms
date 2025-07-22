@@ -1,8 +1,11 @@
 use crate::allow_handler::AllowHandler;
 use crate::broker::Broker;
 use crate::helper::*;
-use bitvmx_broker::rpc::tls_helper::get_pubk_hash_from_privk;
-use std::net::SocketAddr;
+use bitvmx_broker::{routing::RoutingTable, rpc::tls_helper::get_pubk_hash_from_privk};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 use tracing::{error, info};
 
 pub struct P2pHandler {
@@ -14,9 +17,16 @@ impl P2pHandler {
         address: SocketAddr,
         privk: &str, // DER format
         allow_list: AllowHandler,
+        routing: Arc<Mutex<RoutingTable>>,
     ) -> Result<Self, P2pHandlerError> {
-        let broker = Broker::new(address.port(), Some(address.ip()), privk, allow_list)
-            .map_err(|e| P2pHandlerError::Error(format!("Failed to create broker: {}", e)))?;
+        let broker = Broker::new(
+            address.port(),
+            Some(address.ip()),
+            privk,
+            allow_list,
+            routing,
+        )
+        .map_err(|e| P2pHandlerError::Error(format!("Failed to create broker: {}", e)))?;
         Ok(P2pHandler { broker })
     }
 
@@ -82,7 +92,7 @@ impl P2pHandler {
 
 #[cfg(test)]
 mod tests {
-    use std::{net::SocketAddr, thread::sleep, time::Duration};
+    use std::net::SocketAddr;
 
     use super::*;
     use bitvmx_broker::rpc::tls_helper::Cert;
@@ -121,8 +131,18 @@ mod tests {
         let (port1, port2) = (10000, 10001);
         let (peer1, peer2) = get_info(port1, port2);
         let mut allow_list = AllowHandler::new();
-        let mut broker1 = Broker::new(port1, None, &peer1.privk, allow_list.clone()).unwrap();
-        let mut broker2 = Broker::new(port2, None, &peer2.privk, allow_list.clone()).unwrap();
+        let routing = RoutingTable::new();
+        routing.lock().unwrap().allow_all();
+        let mut broker1 = Broker::new(
+            port1,
+            None,
+            &peer1.privk,
+            allow_list.clone(),
+            routing.clone(),
+        )
+        .unwrap();
+        let mut broker2 =
+            Broker::new(port2, None, &peer2.privk, allow_list.clone(), routing).unwrap();
         allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
         allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
 
@@ -137,12 +157,20 @@ mod tests {
 
     #[test]
     fn test_request_response() {
-        init_tracing().unwrap();
         let (port1, port2) = (10002, 10003);
         let (peer1, peer2) = get_info(port1, port2);
         let mut allow_list = AllowHandler::new();
-        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
+        let routing = RoutingTable::new();
+        routing.lock().unwrap().allow_all();
+        let mut p2p1 = P2pHandler::new(
+            peer1.address,
+            &peer1.privk,
+            allow_list.clone(),
+            routing.clone(),
+        )
+        .unwrap();
+        let mut p2p2 =
+            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
         allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
         allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
         let request_data = b"hello peer2".to_vec();
@@ -181,12 +209,20 @@ mod tests {
 
     #[test]
     fn test_concurrent_requests() {
-        init_tracing().unwrap();
         let (port1, port2) = (10004, 10005);
         let (peer1, peer2) = get_info(port1, port2);
         let mut allow_list = AllowHandler::new();
-        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
+        let routing = RoutingTable::new();
+        routing.lock().unwrap().allow_all();
+        let mut p2p1 = P2pHandler::new(
+            peer1.address,
+            &peer1.privk,
+            allow_list.clone(),
+            routing.clone(),
+        )
+        .unwrap();
+        let mut p2p2 =
+            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
         allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
         allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
 
@@ -254,12 +290,20 @@ mod tests {
 
     #[test]
     fn test_channel() {
-        init_tracing().unwrap();
         let (port1, port2) = (10006, 10007);
         let (peer1, peer2) = get_info(port1, port2);
         let mut allow_list = AllowHandler::new();
-        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
+        let routing = RoutingTable::new();
+        routing.lock().unwrap().allow_all();
+        let mut p2p1 = P2pHandler::new(
+            peer1.address,
+            &peer1.privk,
+            allow_list.clone(),
+            routing.clone(),
+        )
+        .unwrap();
+        let mut p2p2 =
+            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
         allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
         allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
 
@@ -280,12 +324,20 @@ mod tests {
 
     #[test]
     fn test_allow_list() {
-        init_tracing().unwrap();
-        let (port1, port2) = (10006, 10007);
+        let (port1, port2) = (10008, 10009);
         let (peer1, peer2) = get_info(port1, port2);
         let mut allow_list = AllowHandler::new();
-        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
+        let routing = RoutingTable::new();
+        routing.lock().unwrap().allow_all();
+        let mut p2p1 = P2pHandler::new(
+            peer1.address,
+            &peer1.privk,
+            allow_list.clone(),
+            routing.clone(),
+        )
+        .unwrap();
+        let mut p2p2 =
+            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
         allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
 
         let result = p2p1.send(&peer2.pubk_hash, peer2.address, b"hello peer2".to_vec());
@@ -311,14 +363,27 @@ mod tests {
         p2p2.stop().unwrap();
     }
 
-    #[test] //TODO: check not passing
+    #[test]
     fn test_reconnecting() {
-        init_tracing().unwrap();
-        let (port1, port2) = (10008, 10009);
+        let (port1, port2) = (10010, 10011);
         let (peer1, peer2) = get_info(port1, port2);
         let mut allow_list = AllowHandler::new();
-        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
+        let routing = RoutingTable::new();
+        routing.lock().unwrap().allow_all();
+        let mut p2p1 = P2pHandler::new(
+            peer1.address,
+            &peer1.privk,
+            allow_list.clone(),
+            routing.clone(),
+        )
+        .unwrap();
+        let mut p2p2 = P2pHandler::new(
+            peer2.address,
+            &peer2.privk,
+            allow_list.clone(),
+            routing.clone(),
+        )
+        .unwrap();
         allow_list.add(peer1.pubk_hash.clone(), None).unwrap();
         allow_list.add(peer2.pubk_hash.clone(), None).unwrap();
 
@@ -337,9 +402,8 @@ mod tests {
 
         // Simulate a reconnect by closing and reopening the broker
         p2p1.stop().unwrap();
-        sleep(Duration::from_millis(500)); // Wait for the broker to close
-
-        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
+        let mut p2p1 =
+            P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone(), routing).unwrap();
 
         // Check if we can still send messages after reconnecting
         p2p1.send(&peer2.pubk_hash, peer2.address, data.clone())
