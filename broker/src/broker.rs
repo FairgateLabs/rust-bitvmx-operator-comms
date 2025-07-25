@@ -24,7 +24,7 @@ impl Broker {
     pub fn new(
         broker_port: u16,
         addr: Option<IpAddr>,
-        privk: &str, // DER format
+        privk: &str, // PEM format
         allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
     ) -> Result<Self, BrokerError> {

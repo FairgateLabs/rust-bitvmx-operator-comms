@@ -99,7 +99,7 @@ pub enum ReceiveHandlerChannel {
 impl P2pHandler {
     pub fn new(
         address: SocketAddr,
-        privk: &str, // DER format
+        privk: &str, // PEM format
         _allow_list: Arc<Mutex<AllowList>>,
     ) -> Result<Self, P2pHandlerError> {
         Ok(P2pHandler {
