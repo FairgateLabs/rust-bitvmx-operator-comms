@@ -1,3 +1,4 @@
+use bitvmx_broker::identification::identifier::Identifier;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -11,6 +12,6 @@ pub enum P2pHandlerError {
 
 #[derive(Debug, PartialEq)]
 pub enum ReceiveHandlerChannel {
-    Msg(String, Vec<u8>), //Id, Msg
+    Msg(Identifier, Vec<u8>), //Id, Msg
     Error(P2pHandlerError),
 }

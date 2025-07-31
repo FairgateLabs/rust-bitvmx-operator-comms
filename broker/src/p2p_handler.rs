@@ -13,6 +13,8 @@ pub struct P2pHandler {
     broker: Broker,
 }
 
+pub type PubKeyHash = String;
+
 impl P2pHandler {
     pub fn new(
         address: SocketAddr,
@@ -20,14 +22,8 @@ impl P2pHandler {
         allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
     ) -> Result<Self, P2pHandlerError> {
-        let broker = Broker::new(
-            address.port(),
-            Some(address.ip()),
-            privk,
-            allow_list,
-            routing,
-        )
-        .map_err(|e| P2pHandlerError::Error(format!("Failed to create broker: {}", e)))?;
+        let broker = Broker::new(address, privk, allow_list, routing)
+            .map_err(|e| P2pHandlerError::Error(format!("Failed to create broker: {e}")))?;
         Ok(P2pHandler { broker })
     }
 
@@ -60,7 +56,7 @@ impl P2pHandler {
 
     pub fn send(
         &self,
-        pubk_hash: &str,
+        pubk_hash: &PubKeyHash,
         address: SocketAddr,
         data: Vec<u8>,
     ) -> Result<(), P2pHandlerError> {
@@ -85,10 +81,20 @@ impl P2pHandler {
     }
 
     // Private Key in PEM format
-    pub fn get_pubk_hash_from_privk(privk: &str) -> Result<String, P2pHandlerError> {
+    pub fn get_pubk_hash_from_privk(privk: &str) -> Result<PubKeyHash, P2pHandlerError> {
         let pk_hash = get_pubk_hash_from_privk(privk)
             .map_err(|e| P2pHandlerError::BrokerError(e.to_string()))?;
         Ok(pk_hash)
+    }
+
+    pub fn get_pubk_hash(&self) -> Result<PubKeyHash, P2pHandlerError> {
+        self.broker
+            .get_pubk_hash()
+            .map_err(|e| P2pHandlerError::BrokerError(e.to_string()))
+    }
+
+    pub fn get_address(&self) -> SocketAddr {
+        self.broker.get_address()
     }
 }
 
@@ -96,8 +102,10 @@ impl P2pHandler {
 mod tests {
     use std::net::SocketAddr;
 
+    use crate::broker::COMMS_ID;
+
     use super::*;
-    use bitvmx_broker::rpc::tls_helper::Cert;
+    use bitvmx_broker::{identification::identifier::Identifier, rpc::tls_helper::Cert};
     use std::net::{IpAddr, Ipv4Addr};
     use tracing_subscriber::{
         fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter,
@@ -121,6 +129,14 @@ mod tests {
                 address,
             }
         }
+
+        fn get_identifier(&self) -> Identifier {
+            Identifier {
+                pubkey_hash: self.pubk_hash.clone(),
+                id: Some(COMMS_ID),
+                address: self.address,
+            }
+        }
     }
     fn get_info(port1: u16, port2: u16) -> (PeerInfo, PeerInfo) {
         let privk1 = "b'-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDhzkbFynswfys/\nVNbM4hzYNKCdAuxYI/jysOPkRHGhlJe+71EE9F2CpAZnjevBsUWxi3+LatfMZjwi\nUz/l3iC6ow8Dsar0BO6RmWQR8Uf/1sx+WNjBk2woISPb60oXbXYj8AVUqYUUSo/Q\nRF5kuGT7dsMvUAx8Irn93w4A5VXx+FLn3r38Tymv7qOMT5cO1xrNStsluBD1RdPj\nz+B6b+7woAKqkrNFR+ZH0HUUKldA+A+pGElQLODyLB7OwxHgKtEsFdyiiDuKW2mP\nsk2dsab9HCNdo9cViA9UbeykDXq7h0/7gYg9XBH8LqqXYpSk/LE6T8k1RVa9EBxV\nRpYqlvFPAgMBAAECggEAV64pfRQq0aIPwP/IiLYkTS/iThWcgH03ZcWaOED7fqqc\nYd+7rhjVVq0qb3uEWCnlzhNE63YJZa0tHIcHANNIEjDO27hZkXd4y8CsQutV8doO\nfeEyCbic/tgffH3Yv1AZ18qTx1QsAL0TKuPhY2rWi26KTAzhTDKP1iyO23ox7Uqs\nwWChuHWyw7SmECRmjKOjTLs1Axea3fos6ERgEv/KZiTi+a9he5JuHOXO6aKTvHI7\nlTAMdloy1CnK6G3Ql7LfBeX20hIwDSZNgp5naB6NjJiDTbxxlGj7apW6hquzJpRP\n1Tn2YLvVKl5bdAOHh44wHBhZR9COjxUT+uASYRb5wQKBgQD7FTe3VPrsi6ejo7db\n9SwTUjsTQKoxrfoNc0xPzGGwKyyArGM++NQI1CZuQQDXVoYl+JC1JOcTLjjW/TYu\nwVGAr63bjtYjU0e8NZzum3nIZ7rpyHJpnbCLBc678KNCvblD4u/Vl1bx/9vRiCTx\n9S0r/LJ54Jr3Ohx9feYERc4K/QKBgQDmOlWNHwFlC2pkYI/0biXWybQZWvz+C5x3\nJO6tf0ykRk2sBEcp07JMhJsE+r4B+lHNSWalkX409Fn6x2ch/6tLP0X+viM5nr+2\nRpGHLpUBeq4+RKMmUS/NgY2DoRV1DRnfk4Vt0BZy5Voc4OVQz0zohwFzYhY60ThR\nV3UJ9HbdOwKBgQCcBS8+CNxzqMRe9xi1V8AvsWVsLT6U6Fr9iKve2k3JvspEmtqB\nAvYfFlVbJaF0Lhvl9HNXXLsKPCqtzWKh4xbWNFSAnl2KTfHBjj8aNhqS4YJQS3Jt\nFsPhX5Z7SqjojCRXfukxfH1Wm3ro1QTAJW4Qa1IsUdl5zu5tPJJ2DTpfsQKBgCii\nXR0mPsnFxQZoYKAEnNsXCJl9DLAN/pSsyQ+IK0/HNMhKjQDd41dMBExRsR2KP8va\ny6onTr4r7oGrlhFTHbmPNlxq1K7DzRRvyhmw6A21yHEnDiCiLay40/BKiw34vPtP\n/znNg1jOECSOsQqdO/bCdUgXJNNGwAjjRb33Ds+nAoGAW76wLk1lwD2tZ8KgMRUU\ni0BkY7eDXPskxCP6BjFq10J/1dC/dsLO9mZfwl2BJ2D+gGmcIzdSb5p1LkuniGuv\nV+/lSa8bdUKwtd5l+CZ0OMqmHryQZICqGeG5uREYv5eqs4mDiuM8QkZdOZUKWzPc\nwWJXrp5cQtvgjS/HyjHB69o=\n-----END PRIVATE KEY-----\n'";
@@ -141,26 +157,22 @@ mod tests {
         let data = "hello".to_string();
         let (port1, port2) = (10000, 10001);
         let (peer1, peer2) = get_info(port1, port2);
+        let addr1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port1);
+        let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port2);
         let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
-        let mut broker1 = Broker::new(
-            port1,
-            None,
-            &peer1.privk,
-            allow_list.clone(),
-            routing.clone(),
-        )
-        .unwrap();
+        let mut broker1 =
+            Broker::new(addr1, &peer1.privk, allow_list.clone(), routing.clone()).unwrap();
         let mut broker2 =
-            Broker::new(port2, None, &peer2.privk, allow_list.clone(), routing).unwrap();
+            Broker::new(addr2, &peer2.privk, allow_list.clone(), routing.clone()).unwrap();
         add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         broker1
             .put(port2, None, peer2.pubk_hash, data.clone())
             .unwrap();
         let received_data = broker2.get().unwrap();
-        assert_eq!(received_data, Some((peer1.pubk_hash, data)));
+        assert_eq!(received_data, Some((peer1.get_identifier(), data)));
         broker1.close();
         broker2.close();
     }
@@ -192,7 +204,7 @@ mod tests {
         // peer2 receives the request
         match p2p2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-                assert_eq!(from_id, peer1.pubk_hash);
+                assert_eq!(from_id, peer1.get_identifier());
                 assert_eq!(data, request_data);
 
                 // peer2 sends a response back to peer1
@@ -205,7 +217,7 @@ mod tests {
         // peer1 receives the response
         match p2p1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-                assert_eq!(from_id, peer2.pubk_hash);
+                assert_eq!(from_id, peer2.get_identifier());
                 assert_eq!(data, response_data);
             }
             _ => panic!("Peer1 expected to receive a response"),
@@ -250,7 +262,7 @@ mod tests {
 
         match p2p2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-                assert_eq!(from_id, peer1.pubk_hash);
+                assert_eq!(from_id, peer1.get_identifier());
                 assert_eq!(data, request_data_1);
 
                 // peer2 sends a response back to peer1
@@ -263,7 +275,7 @@ mod tests {
         //peer1 receives the request
         match p2p1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-                assert_eq!(from_id, peer2.pubk_hash);
+                assert_eq!(from_id, peer2.get_identifier());
                 assert_eq!(data, request_data_2);
 
                 // peer1 sends a response back to peer2
@@ -276,7 +288,7 @@ mod tests {
         // peer1 receives the response
         match p2p1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-                assert_eq!(from_id, peer2.pubk_hash);
+                assert_eq!(from_id, peer2.get_identifier());
                 assert_eq!(data, response_data_1);
             }
             _ => panic!("Peer1 expected to receive a response"),
@@ -285,7 +297,7 @@ mod tests {
         // peer2 receives the response
         match p2p2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
-                assert_eq!(from_id, peer1.pubk_hash);
+                assert_eq!(from_id, peer1.get_identifier());
                 assert_eq!(data, response_data_2);
             }
             _ => panic!("Peer2 expected to receive a response"),
@@ -319,7 +331,10 @@ mod tests {
             .unwrap();
         assert_eq!(
             p2p2.check_receive(),
-            Some(ReceiveHandlerChannel::Msg(peer1.pubk_hash, data.clone()))
+            Some(ReceiveHandlerChannel::Msg(
+                peer1.get_identifier(),
+                data.clone()
+            ))
         );
         assert_eq!(p2p2.check_receive(), None);
         assert_eq!(p2p1.check_receive(), None);
@@ -361,7 +376,7 @@ mod tests {
         assert_eq!(
             p2p2.check_receive(),
             Some(ReceiveHandlerChannel::Msg(
-                peer1.pubk_hash.clone(),
+                peer1.get_identifier().clone(),
                 b"hello peer2".to_vec()
             ))
         );
@@ -402,7 +417,7 @@ mod tests {
         assert_eq!(
             p2p2.check_receive(),
             Some(ReceiveHandlerChannel::Msg(
-                peer1.pubk_hash.clone(),
+                peer1.get_identifier().clone(),
                 data.clone()
             ))
         );
@@ -418,7 +433,7 @@ mod tests {
 
         assert_eq!(
             p2p2.check_receive(),
-            Some(ReceiveHandlerChannel::Msg(peer1.pubk_hash, data))
+            Some(ReceiveHandlerChannel::Msg(peer1.get_identifier(), data))
         );
 
         // Close the brokers

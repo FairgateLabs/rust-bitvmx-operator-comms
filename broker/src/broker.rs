@@ -6,29 +6,33 @@ use bitvmx_broker::{
 };
 // use bitvmx_broker::broker_memstorage::MemStorage;
 use std::{
-    net::IpAddr,
+    net::{IpAddr, SocketAddr},
     sync::{Arc, Mutex},
 };
 use storage_backend::{storage::Storage, storage_config::StorageConfig};
 use tracing::info;
+
+use crate::p2p_handler::PubKeyHash;
+
+pub const COMMS_ID: u8 = 0; // Default ID for communication
 
 pub struct Broker {
     broker: BrokerSync,
     local_channel: Option<LocalChannel<BrokerStorage>>,
     // local_channel: LocalChannel<MemStorage>,
     cert: Cert,
+    address: SocketAddr,
     allow_list: Arc<Mutex<AllowList>>,
 }
 
 impl Broker {
     pub fn new(
-        broker_port: u16,
-        addr: Option<IpAddr>,
+        address: SocketAddr,
         privk: &str, // PEM format
         allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
     ) -> Result<Self, BrokerError> {
-        let storage_path = format!("/tmp/broker_p2p_{}", broker_port);
+        let storage_path = format!("/tmp/broker_p2p_{}", address.port());
         let config = StorageConfig::new(storage_path.clone(), None);
         let broker_backend =
             Storage::new(&config).map_err(|e| BrokerError::StorageError(e.to_string()))?;
@@ -36,7 +40,12 @@ impl Broker {
         let broker_storage = Arc::new(Mutex::new(BrokerStorage::new(broker_backend)));
         let cert = Cert::new_with_privk(privk)?;
         let pubk_hash = cert.get_pubk_hash()?;
-        let broker_config = BrokerConfig::new(broker_port, addr, pubk_hash.clone(), None)?;
+        let broker_config = BrokerConfig::new(
+            address.port(),
+            Some(address.ip()),
+            pubk_hash.clone(),
+            Some(COMMS_ID),
+        )?;
         let broker = BrokerSync::new(
             &broker_config,
             broker_storage.clone(),
@@ -47,7 +56,8 @@ impl Broker {
         let local_channel = LocalChannel::new(
             Identifier {
                 pubkey_hash: pubk_hash.clone(),
-                id: Some(0),
+                id: Some(COMMS_ID),
+                address,
             },
             broker_storage.clone(),
         );
@@ -56,6 +66,7 @@ impl Broker {
             broker,
             local_channel: Some(local_channel),
             cert,
+            address,
             allow_list,
         })
     }
@@ -68,11 +79,13 @@ impl Broker {
         data: String,
     ) -> Result<(), BrokerError> {
         // It doesnt check address when sending data, only when receiving
-        let server_config = BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone(), None)?;
+        let server_config =
+            BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone(), Some(COMMS_ID))?;
         let channel = DualChannel::new(
             &server_config,
             self.cert.clone(),
             None,
+            self.address,
             self.allow_list.clone(),
         )?;
         channel.send(None, data.clone())?;
@@ -80,7 +93,7 @@ impl Broker {
         Ok(())
     }
 
-    pub fn get(&self) -> Result<Option<(String, String)>, BrokerError> {
+    pub fn get(&self) -> Result<Option<(Identifier, String)>, BrokerError> {
         match &self.local_channel {
             Some(channel) => {
                 if let Some((data, identifier)) = channel.recv()? {
@@ -88,18 +101,22 @@ impl Broker {
                         "Received data {:?} from broker with id {}",
                         data, identifier
                     );
-                    if identifier.id != Some(0) {
-                        return Err(BrokerError::InvalidIdentifier(
-                            "Received data from non-local broker".to_string(),
-                        ));
-                    }
-                    Ok(Some((identifier.pubkey_hash, data)))
+                    Ok(Some((identifier, data)))
                 } else {
                     Ok(None)
                 }
             }
             None => Err(BrokerError::ClosedChannel),
         }
+    }
+
+    pub fn get_pubk_hash(&self) -> Result<PubKeyHash, BrokerError> {
+        let pubk_hash = self.cert.get_pubk_hash()?;
+        Ok(pubk_hash)
+    }
+
+    pub fn get_address(&self) -> SocketAddr {
+        self.address
     }
 
     pub fn close(&mut self) {

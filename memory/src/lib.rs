@@ -1,14 +1,8 @@
-use broker::{
-    p2p_handler::P2pHandler as AuxHandler,
-    p2p_handler::{AllowList, RoutingTable},
-};
+use broker::{p2p_handler::AllowList, p2p_handler::P2pHandler as AuxHandler};
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
-    fmt::Display,
     net::SocketAddr,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
