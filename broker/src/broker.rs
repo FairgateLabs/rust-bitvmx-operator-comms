@@ -28,7 +28,7 @@ pub struct Broker {
 impl Broker {
     pub fn new(
         address: SocketAddr,
-        privk: &str, // PEM format
+        privk: &str, //File with PEM format
         allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
     ) -> Result<Self, BrokerError> {
@@ -38,7 +38,7 @@ impl Broker {
             Storage::new(&config).map_err(|e| BrokerError::StorageError(e.to_string()))?;
         let broker_backend = Arc::new(Mutex::new(broker_backend));
         let broker_storage = Arc::new(Mutex::new(BrokerStorage::new(broker_backend)));
-        let cert = Cert::new_with_privk(privk)?;
+        let cert = Cert::from_key_file(privk)?;
         let pubk_hash = cert.get_pubk_hash()?;
         let broker_config = BrokerConfig::new(
             address.port(),
@@ -88,7 +88,7 @@ impl Broker {
             self.address,
             self.allow_list.clone(),
         )?;
-        channel.send(None, data.clone())?;
+        channel.send_server(data.clone())?;
         info!("Send data {:?} to broker with id {}", data, dest_pubk_hash);
         Ok(())
     }
