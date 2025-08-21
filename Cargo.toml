@@ -2,6 +2,10 @@
 name = "p2p_handler"
 version = "0.1.0"
 edition = "2021"
+description = "BitVMX Operator Comms"
+keywords = ["BitVMX", "Operator", "Comms"]
+repository = "https://github.com/FairgateLabs/rust-fakep2p"
+readme = "README.md"
 
 [workspace]
 resolver = "2"

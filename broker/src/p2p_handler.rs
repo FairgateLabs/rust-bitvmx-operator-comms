@@ -1,14 +1,12 @@
 use crate::broker::Broker;
 use crate::helper::*;
+pub use bitvmx_broker::identification::{allow_list::AllowList, routing::RoutingTable};
 use bitvmx_broker::rpc::tls_helper::get_pubk_hash_from_privk;
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
 use tracing::{error, info};
-
-pub use bitvmx_broker::identification::{allow_list::AllowList, routing::RoutingTable};
-
 pub struct P2pHandler {
     broker: Broker,
 }
@@ -451,5 +449,52 @@ mod tests {
             .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
             .try_init()?;
         Ok(())
+    }
+
+    #[test]
+    fn test_readme_example() {
+        // Inititialize peers
+        let privk1 = "test_certs/priv1.key";
+        let privk2 = "test_certs/priv2.key";
+        let addr1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 20000);
+        let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 20001);
+        let cert1 = Cert::from_key_file(privk1).unwrap();
+        let cert2 = Cert::from_key_file(privk2).unwrap();
+        let pubk_hash1 = cert1.get_pubk_hash().unwrap();
+        let pubk_hash2 = cert2.get_pubk_hash().unwrap();
+        let identifier1 = Identifier::new_local(pubk_hash1, 0, 20000);
+        let identifier2 = Identifier::new_local(pubk_hash2.clone(), 0, 20001);
+
+        // Add peers to allow list and routing table
+        let allow_list =
+            AllowList::from_certs(vec![cert1, cert2], vec![addr1.ip(), addr2.ip()]).unwrap();
+        let routing = RoutingTable::new();
+        routing
+            .lock()
+            .unwrap()
+            .add_route(identifier1.clone(), identifier2);
+
+        // Initialize P2P handlers
+        let mut p2p1 =
+            P2pHandler::new(addr1, &privk1, allow_list.clone(), routing.clone()).unwrap();
+        let mut p2p2 = P2pHandler::new(addr2, &privk2, allow_list.clone(), routing).unwrap();
+
+        let msg = b"hello peer2".to_vec();
+
+        // Peer1 sends message to peer2
+        p2p1.send(&pubk_hash2, addr2, msg.clone()).unwrap();
+
+        // Peer2 receives the message
+        match p2p2.check_receive() {
+            Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
+                assert_eq!(from_id, identifier1);
+                assert_eq!(data, msg);
+            }
+            _ => panic!("Peer2 expected to receive a message"),
+        }
+
+        // Close the brokers
+        p2p1.stop().unwrap();
+        p2p2.stop().unwrap();
     }
 }
