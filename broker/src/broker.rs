@@ -52,7 +52,7 @@ impl Broker {
             cert.clone(),
             allow_list.clone(),
             routing,
-        );
+        )?;
         let local_channel = LocalChannel::new(
             Identifier {
                 pubkey_hash: pubk_hash.clone(),
