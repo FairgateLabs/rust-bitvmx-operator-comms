@@ -12,7 +12,7 @@ use std::{
 use storage_backend::{storage::Storage, storage_config::StorageConfig};
 use tracing::info;
 
-use crate::p2p_handler::PubKeyHash;
+use crate::operator_comms::PubKeyHash;
 
 pub const COMMS_ID: u8 = 0; // Default ID for communication
 
@@ -22,7 +22,6 @@ pub struct Broker {
     // local_channel: LocalChannel<MemStorage>,
     cert: Cert,
     address: SocketAddr,
-    allow_list: Arc<Mutex<AllowList>>,
 }
 
 impl Broker {
@@ -31,8 +30,12 @@ impl Broker {
         privk: &str, //File with PEM format
         allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
+        storage_path: Option<String>,
     ) -> Result<Self, BrokerError> {
-        let storage_path = format!("/tmp/broker_p2p_{}", address.port());
+        let storage_path = match storage_path {
+            Some(path) => path,
+            None => format!("/tmp/broker_comms_{}", address.port()),
+        };
         let config = StorageConfig::new(storage_path.clone(), None);
         let broker_backend =
             Storage::new(&config).map_err(|e| BrokerError::StorageError(e.to_string()))?;
@@ -40,17 +43,13 @@ impl Broker {
         let broker_storage = Arc::new(Mutex::new(BrokerStorage::new(broker_backend)));
         let cert = Cert::from_key_file(privk)?;
         let pubk_hash = cert.get_pubk_hash()?;
-        let broker_config = BrokerConfig::new(
-            address.port(),
-            Some(address.ip()),
-            pubk_hash.clone(),
-            Some(COMMS_ID),
-        )?;
+        let broker_config =
+            BrokerConfig::new(address.port(), Some(address.ip()), pubk_hash.clone())?;
         let broker = BrokerSync::new(
             &broker_config,
             broker_storage.clone(),
             cert.clone(),
-            allow_list.clone(),
+            allow_list,
             routing,
         )?;
         let local_channel = LocalChannel::new(
@@ -67,7 +66,6 @@ impl Broker {
             local_channel: Some(local_channel),
             cert,
             address,
-            allow_list,
         })
     }
 
@@ -79,15 +77,9 @@ impl Broker {
         data: String,
     ) -> Result<(), BrokerError> {
         // It doesnt check address when sending data, only when receiving
-        let server_config =
-            BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone(), Some(COMMS_ID))?;
-        let channel = DualChannel::new(
-            &server_config,
-            self.cert.clone(),
-            None,
-            self.address,
-            self.allow_list.clone(),
-        )?;
+        let server_config = BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone())?;
+        let channel =
+            DualChannel::new(&server_config, self.cert.clone(), None, self.address, None)?;
         channel.send_server(data.clone())?;
         info!("Send data {:?} to broker with id {}", data, dest_pubk_hash);
         Ok(())

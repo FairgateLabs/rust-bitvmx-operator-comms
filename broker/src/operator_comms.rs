@@ -7,22 +7,23 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tracing::{error, info};
-pub struct P2pHandler {
+pub struct OperatorComms {
     broker: Broker,
 }
 
 pub type PubKeyHash = String;
 
-impl P2pHandler {
+impl OperatorComms {
     pub fn new(
         address: SocketAddr,
         privk: &str, // File with PEM format
         allow_list: Arc<Mutex<AllowList>>,
         routing: Arc<Mutex<RoutingTable>>,
-    ) -> Result<Self, P2pHandlerError> {
-        let broker = Broker::new(address, privk, allow_list, routing)
-            .map_err(|e| P2pHandlerError::Error(format!("Failed to create broker: {e}")))?;
-        Ok(P2pHandler { broker })
+        storage_path: Option<String>,
+    ) -> Result<Self, OperatorCommsError> {
+        let broker = Broker::new(address, privk, allow_list, routing, storage_path)
+            .map_err(|e| OperatorCommsError::Error(format!("Failed to create broker: {e}")))?;
+        Ok(OperatorComms { broker })
     }
 
     pub fn check_receive(&mut self) -> Option<ReceiveHandlerChannel> {
@@ -36,15 +37,17 @@ impl P2pHandler {
         }
     }
 
-    fn internal_check_receive(&mut self) -> Result<Option<ReceiveHandlerChannel>, P2pHandlerError> {
+    fn internal_check_receive(
+        &mut self,
+    ) -> Result<Option<ReceiveHandlerChannel>, OperatorCommsError> {
         match self
             .broker
             .get()
-            .map_err(|e| P2pHandlerError::BrokerError(e.to_string()))?
+            .map_err(|e| OperatorCommsError::BrokerError(e.to_string()))?
         {
             Some((id, data)) => {
                 let data = serde_json::from_str::<Vec<u8>>(&data.to_string())
-                    .map_err(|e| P2pHandlerError::Error(e.to_string()))?;
+                    .map_err(|e| OperatorCommsError::Error(e.to_string()))?;
                 info!("Receive data from id: {}: {:?}", id, data);
                 Ok(Some(ReceiveHandlerChannel::Msg(id, data)))
             }
@@ -57,9 +60,9 @@ impl P2pHandler {
         pubk_hash: &PubKeyHash,
         address: SocketAddr,
         data: Vec<u8>,
-    ) -> Result<(), P2pHandlerError> {
+    ) -> Result<(), OperatorCommsError> {
         let data =
-            serde_json::to_string(&data).map_err(|e| P2pHandlerError::Error(e.to_string()))?;
+            serde_json::to_string(&data).map_err(|e| OperatorCommsError::Error(e.to_string()))?;
 
         self.broker
             .put(
@@ -68,27 +71,27 @@ impl P2pHandler {
                 pubk_hash.to_string(),
                 data,
             )
-            .map_err(|e| P2pHandlerError::BrokerError(e.to_string()))?;
+            .map_err(|e| OperatorCommsError::BrokerError(e.to_string()))?;
 
         Ok(())
     }
 
-    pub fn stop(&mut self) -> Result<(), P2pHandlerError> {
+    pub fn stop(&mut self) -> Result<(), OperatorCommsError> {
         self.broker.close();
         Ok(())
     }
 
     // Private Key in PEM format
-    pub fn get_pubk_hash_from_privk(privk: &str) -> Result<PubKeyHash, P2pHandlerError> {
+    pub fn get_pubk_hash_from_privk(privk: &str) -> Result<PubKeyHash, OperatorCommsError> {
         let pk_hash = get_pubk_hash_from_privk(privk)
-            .map_err(|e| P2pHandlerError::BrokerError(e.to_string()))?;
+            .map_err(|e| OperatorCommsError::BrokerError(e.to_string()))?;
         Ok(pk_hash)
     }
 
-    pub fn get_pubk_hash(&self) -> Result<PubKeyHash, P2pHandlerError> {
+    pub fn get_pubk_hash(&self) -> Result<PubKeyHash, OperatorCommsError> {
         self.broker
             .get_pubk_hash()
-            .map_err(|e| P2pHandlerError::BrokerError(e.to_string()))
+            .map_err(|e| OperatorCommsError::BrokerError(e.to_string()))
     }
 
     pub fn get_address(&self) -> SocketAddr {
@@ -160,10 +163,22 @@ mod tests {
         let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
-        let mut broker1 =
-            Broker::new(addr1, &peer1.privk, allow_list.clone(), routing.clone()).unwrap();
-        let mut broker2 =
-            Broker::new(addr2, &peer2.privk, allow_list.clone(), routing.clone()).unwrap();
+        let mut broker1 = Broker::new(
+            addr1,
+            &peer1.privk,
+            allow_list.clone(),
+            routing.clone(),
+            None,
+        )
+        .unwrap();
+        let mut broker2 = Broker::new(
+            addr2,
+            &peer2.privk,
+            allow_list.clone(),
+            routing.clone(),
+            None,
+        )
+        .unwrap();
         add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         broker1
@@ -182,38 +197,47 @@ mod tests {
         let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
-        let mut p2p1 = P2pHandler::new(
+        let mut comms1 = OperatorComms::new(
             peer1.address,
             &peer1.privk,
             allow_list.clone(),
             routing.clone(),
+            None,
         )
         .unwrap();
-        let mut p2p2 =
-            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
+        let mut comms2 = OperatorComms::new(
+            peer2.address,
+            &peer2.privk,
+            allow_list.clone(),
+            routing,
+            None,
+        )
+        .unwrap();
         add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
         let request_data = b"hello peer2".to_vec();
         let response_data = b"hello peer1".to_vec();
 
         // peer1 sends request to peer2
-        p2p1.send(&peer2.pubk_hash, peer2.address, request_data.clone())
+        comms1
+            .send(&peer2.pubk_hash, peer2.address, request_data.clone())
             .unwrap();
 
         // peer2 receives the request
-        match p2p2.check_receive() {
+        match comms2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer1.get_identifier());
                 assert_eq!(data, request_data);
 
                 // peer2 sends a response back to peer1
-                p2p2.send(&peer1.pubk_hash, peer1.address, response_data.clone())
+                comms2
+                    .send(&peer1.pubk_hash, peer1.address, response_data.clone())
                     .unwrap();
             }
             _ => panic!("Peer2 expected to receive a message"),
         }
 
         // peer1 receives the response
-        match p2p1.check_receive() {
+        match comms1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer2.get_identifier());
                 assert_eq!(data, response_data);
@@ -222,8 +246,8 @@ mod tests {
         }
 
         // Close the brokers
-        p2p1.stop().unwrap();
-        p2p2.stop().unwrap();
+        comms1.stop().unwrap();
+        comms2.stop().unwrap();
     }
 
     #[test]
@@ -233,15 +257,22 @@ mod tests {
         let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
-        let mut p2p1 = P2pHandler::new(
+        let mut comms1 = OperatorComms::new(
             peer1.address,
             &peer1.privk,
             allow_list.clone(),
             routing.clone(),
+            None,
         )
         .unwrap();
-        let mut p2p2 =
-            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
+        let mut comms2 = OperatorComms::new(
+            peer2.address,
+            &peer2.privk,
+            allow_list.clone(),
+            routing,
+            None,
+        )
+        .unwrap();
         add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         let request_data_1 = b"hello peer2".to_vec();
@@ -251,40 +282,44 @@ mod tests {
         let response_data_2 = b"pong".to_vec();
 
         // peer1 sends request to peer2
-        p2p1.send(&peer2.pubk_hash, peer2.address, request_data_1.clone())
+        comms1
+            .send(&peer2.pubk_hash, peer2.address, request_data_1.clone())
             .unwrap();
 
         // peer2 sends request to peer1
-        p2p2.send(&peer1.pubk_hash, peer1.address, request_data_2.clone())
+        comms2
+            .send(&peer1.pubk_hash, peer1.address, request_data_2.clone())
             .unwrap();
 
-        match p2p2.check_receive() {
+        match comms2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer1.get_identifier());
                 assert_eq!(data, request_data_1);
 
                 // peer2 sends a response back to peer1
-                p2p2.send(&peer1.pubk_hash, peer1.address, response_data_1.clone())
+                comms2
+                    .send(&peer1.pubk_hash, peer1.address, response_data_1.clone())
                     .unwrap();
             }
             _ => panic!("Peer2 expected to receive a message"),
         }
 
         //peer1 receives the request
-        match p2p1.check_receive() {
+        match comms1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer2.get_identifier());
                 assert_eq!(data, request_data_2);
 
                 // peer1 sends a response back to peer2
-                p2p1.send(&peer2.pubk_hash, peer2.address, response_data_2.clone())
+                comms1
+                    .send(&peer2.pubk_hash, peer2.address, response_data_2.clone())
                     .unwrap();
             }
             _ => panic!("Peer1 expected to receive a message"),
         }
 
         // peer1 receives the response
-        match p2p1.check_receive() {
+        match comms1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer2.get_identifier());
                 assert_eq!(data, response_data_1);
@@ -293,7 +328,7 @@ mod tests {
         }
 
         // peer2 receives the response
-        match p2p2.check_receive() {
+        match comms2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer1.get_identifier());
                 assert_eq!(data, response_data_2);
@@ -302,8 +337,8 @@ mod tests {
         }
 
         // Close the brokers
-        p2p1.stop().unwrap();
-        p2p2.stop().unwrap();
+        comms1.stop().unwrap();
+        comms2.stop().unwrap();
     }
 
     #[test]
@@ -313,33 +348,41 @@ mod tests {
         let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
-        let mut p2p1 = P2pHandler::new(
+        let mut comms1 = OperatorComms::new(
             peer1.address,
             &peer1.privk,
             allow_list.clone(),
             routing.clone(),
+            None,
         )
         .unwrap();
-        let mut p2p2 =
-            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
+        let mut comms2 = OperatorComms::new(
+            peer2.address,
+            &peer2.privk,
+            allow_list.clone(),
+            routing,
+            None,
+        )
+        .unwrap();
         add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         let data = b"hello peer2".to_vec();
-        p2p1.send(&peer2.pubk_hash, peer2.address, data.clone())
+        comms1
+            .send(&peer2.pubk_hash, peer2.address, data.clone())
             .unwrap();
         assert_eq!(
-            p2p2.check_receive(),
+            comms2.check_receive(),
             Some(ReceiveHandlerChannel::Msg(
                 peer1.get_identifier(),
                 data.clone()
             ))
         );
-        assert_eq!(p2p2.check_receive(), None);
-        assert_eq!(p2p1.check_receive(), None);
+        assert_eq!(comms2.check_receive(), None);
+        assert_eq!(comms1.check_receive(), None);
 
         // Close the brokers
-        p2p1.stop().unwrap();
-        p2p2.stop().unwrap();
+        comms1.stop().unwrap();
+        comms2.stop().unwrap();
     }
 
     #[test]
@@ -349,39 +392,46 @@ mod tests {
         let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
-        let mut p2p1 = P2pHandler::new(
+        let mut comms1 = OperatorComms::new(
             peer1.address,
             &peer1.privk,
             allow_list.clone(),
             routing.clone(),
+            None,
         )
         .unwrap();
-        let mut p2p2 =
-            P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone(), routing).unwrap();
-        add_allow_list(allow_list.clone(), vec![peer1.clone()]);
-
-        let result = p2p1.send(&peer2.pubk_hash, peer2.address, b"hello peer2".to_vec());
-        assert!(matches!(result, Err(P2pHandlerError::BrokerError(_))));
-        let result = p2p2.send(&peer1.pubk_hash, peer1.address, b"hello peer1".to_vec());
-        assert!(matches!(result, Err(P2pHandlerError::BrokerError(_))));
-        assert!(p2p1.check_receive().is_none());
-        assert!(p2p2.check_receive().is_none());
-
+        let mut comms2 = OperatorComms::new(
+            peer2.address,
+            &peer2.privk,
+            allow_list.clone(),
+            routing,
+            None,
+        )
+        .unwrap();
         add_allow_list(allow_list.clone(), vec![peer2.clone()]);
 
-        p2p1.send(&peer2.pubk_hash, peer2.address, b"hello peer2".to_vec())
+        let result = comms1.send(&peer2.pubk_hash, peer2.address, b"hello peer2".to_vec());
+        assert!(matches!(result, Err(OperatorCommsError::BrokerError(_))));
+        let result = comms2.send(&peer1.pubk_hash, peer1.address, b"hello peer1".to_vec());
+        assert!(matches!(result, Ok(_))); // This is ok because although peer1 is not in the allow list, is the server (so it was automatically added to the allow list)
+
+        add_allow_list(allow_list.clone(), vec![peer1.clone()]);
+
+        comms2
+            .send(&peer1.pubk_hash, peer1.address, b"hello peer1".to_vec())
             .unwrap();
+
         assert_eq!(
-            p2p2.check_receive(),
+            comms1.check_receive(),
             Some(ReceiveHandlerChannel::Msg(
-                peer1.get_identifier().clone(),
-                b"hello peer2".to_vec()
+                peer2.get_identifier().clone(),
+                b"hello peer1".to_vec()
             ))
         );
 
         // Close the brokers
-        p2p1.stop().unwrap();
-        p2p2.stop().unwrap();
+        comms1.stop().unwrap();
+        comms2.stop().unwrap();
     }
 
     #[test]
@@ -391,29 +441,32 @@ mod tests {
         let allow_list = AllowList::new();
         let routing = RoutingTable::new();
         routing.lock().unwrap().allow_all();
-        let mut p2p1 = P2pHandler::new(
+        let mut comms1 = OperatorComms::new(
             peer1.address,
             &peer1.privk,
             allow_list.clone(),
             routing.clone(),
+            None,
         )
         .unwrap();
-        let mut p2p2 = P2pHandler::new(
+        let mut comms2 = OperatorComms::new(
             peer2.address,
             &peer2.privk,
             allow_list.clone(),
             routing.clone(),
+            None,
         )
         .unwrap();
         add_allow_list(allow_list.clone(), vec![peer1.clone(), peer2.clone()]);
 
         let data = b"hello peer2".to_vec();
 
-        p2p1.send(&peer2.pubk_hash, peer2.address, data.clone())
+        comms1
+            .send(&peer2.pubk_hash, peer2.address, data.clone())
             .unwrap();
 
         assert_eq!(
-            p2p2.check_receive(),
+            comms2.check_receive(),
             Some(ReceiveHandlerChannel::Msg(
                 peer1.get_identifier().clone(),
                 data.clone()
@@ -421,27 +474,36 @@ mod tests {
         );
 
         // Simulate a reconnect by closing and reopening the broker
-        p2p1.stop().unwrap();
-        let mut p2p1 =
-            P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone(), routing).unwrap();
+        comms1.stop().unwrap();
+        // Wait a moment to ensure the port is released
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut comms1 = OperatorComms::new(
+            peer1.address,
+            &peer1.privk,
+            allow_list.clone(),
+            routing,
+            None,
+        )
+        .unwrap();
 
         // Check if we can still send messages after reconnecting
-        p2p1.send(&peer2.pubk_hash, peer2.address, data.clone())
+        comms1
+            .send(&peer2.pubk_hash, peer2.address, data.clone())
             .unwrap();
 
         assert_eq!(
-            p2p2.check_receive(),
+            comms2.check_receive(),
             Some(ReceiveHandlerChannel::Msg(peer1.get_identifier(), data))
         );
 
         // Close the brokers
-        p2p1.stop().unwrap();
-        p2p2.stop().unwrap();
+        comms1.stop().unwrap();
+        comms2.stop().unwrap();
     }
 
     pub fn init_tracing() -> anyhow::Result<()> {
         let filter = EnvFilter::builder()
-            .parse("info,tarpc=off") // Include everything at "info" except `libp2p`
+            .parse("info,tarpc=off") // Include everything at "info" except `libcomms`
             .expect("Invalid filter");
 
         tracing_subscriber::registry()
@@ -474,18 +536,19 @@ mod tests {
             .unwrap()
             .add_route(identifier1.clone(), identifier2);
 
-        // Initialize P2P handlers
-        let mut p2p1 =
-            P2pHandler::new(addr1, &privk1, allow_list.clone(), routing.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(addr2, &privk2, allow_list.clone(), routing).unwrap();
+        // Initialize comms handlers
+        let mut comms1 =
+            OperatorComms::new(addr1, &privk1, allow_list.clone(), routing.clone(), None).unwrap();
+        let mut comms2 =
+            OperatorComms::new(addr2, &privk2, allow_list.clone(), routing, None).unwrap();
 
         let msg = b"hello peer2".to_vec();
 
         // Peer1 sends message to peer2
-        p2p1.send(&pubk_hash2, addr2, msg.clone()).unwrap();
+        comms1.send(&pubk_hash2, addr2, msg.clone()).unwrap();
 
         // Peer2 receives the message
-        match p2p2.check_receive() {
+        match comms2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, identifier1);
                 assert_eq!(data, msg);
@@ -494,7 +557,7 @@ mod tests {
         }
 
         // Close the brokers
-        p2p1.stop().unwrap();
-        p2p2.stop().unwrap();
+        comms1.stop().unwrap();
+        comms2.stop().unwrap();
     }
 }

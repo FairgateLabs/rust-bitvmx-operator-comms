@@ -1,4 +1,4 @@
-use broker::{p2p_handler::AllowList, p2p_handler::P2pHandler as AuxHandler};
+use broker::operator_comms::{AllowList, OperatorComms as AuxHandler};
 use lazy_static::lazy_static;
 use std::{
     collections::{HashMap, VecDeque},
@@ -73,13 +73,13 @@ fn put(my_id: String, pubk_hash: String, data: Vec<u8>) {
 //     }
 // }
 
-pub struct P2pHandler {
+pub struct OperatorComms {
     pubk_hash: String,
-    address: SocketAddr,
+    _address: SocketAddr,
 }
 
 #[derive(Error, Debug, PartialEq)]
-pub enum P2pHandlerError {
+pub enum OperatorCommsError {
     #[error("Internal error")]
     Error,
 }
@@ -87,19 +87,19 @@ pub enum P2pHandlerError {
 #[derive(Debug, PartialEq)]
 pub enum ReceiveHandlerChannel {
     Msg(String, Vec<u8>),
-    Error(P2pHandlerError),
+    Error(OperatorCommsError),
 }
 
-impl P2pHandler {
+impl OperatorComms {
     pub fn new(
         address: SocketAddr,
         privk: &str, // PEM format
         _allow_list: Arc<Mutex<AllowList>>,
-    ) -> Result<Self, P2pHandlerError> {
-        Ok(P2pHandler {
+    ) -> Result<Self, OperatorCommsError> {
+        Ok(OperatorComms {
             pubk_hash: AuxHandler::get_pubk_hash_from_privk(privk)
-                .map_err(|_| P2pHandlerError::Error)?,
-            address,
+                .map_err(|_| OperatorCommsError::Error)?,
+            _address: address,
         })
     }
 
@@ -118,7 +118,7 @@ impl P2pHandler {
         pubk_hash: &str,
         address: SocketAddr,
         data: Vec<u8>,
-    ) -> Result<(), P2pHandlerError> {
+    ) -> Result<(), OperatorCommsError> {
         info!(
             "Send data to peer: {} at address: {}: {:?}",
             pubk_hash, address, data
@@ -166,8 +166,10 @@ mod tests {
         let (port1, port2) = (10002, 10003);
         let (peer1, peer2) = get_info(port1, port2);
         let allow_list = AllowList::new();
-        let mut p2p1 = P2pHandler::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
+        let mut comms1 =
+            OperatorComms::new(peer1.address, &peer1.privk, allow_list.clone()).unwrap();
+        let mut comms2 =
+            OperatorComms::new(peer2.address, &peer2.privk, allow_list.clone()).unwrap();
         allow_list
             .lock()
             .unwrap()
@@ -180,24 +182,26 @@ mod tests {
         let response_data = b"hello peer1".to_vec();
 
         // peer1 sends request to peer2
-        p2p1.send(&peer2.pubk_hash, peer2.address, request_data.clone())
+        comms1
+            .send(&peer2.pubk_hash, peer2.address, request_data.clone())
             .unwrap();
 
         // peer2 receives the request
-        match p2p2.check_receive() {
+        match comms2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer1.pubk_hash);
                 assert_eq!(data, request_data);
 
                 // peer2 sends a response back to peer1
-                p2p2.send(&peer1.pubk_hash, peer1.address, response_data.clone())
+                comms2
+                    .send(&peer1.pubk_hash, peer1.address, response_data.clone())
                     .unwrap();
             }
             _ => panic!("Peer2 expected to receive a message"),
         }
 
         // peer1 receives the response
-        match p2p1.check_receive() {
+        match comms1.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, peer2.pubk_hash);
                 assert_eq!(data, response_data);

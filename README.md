@@ -5,7 +5,7 @@
 **BitVMX Operator Comms** provides a communication layer for direct connections between operators, built on top of the [Rust BitVMX Broker](https://github.com/FairgateLabs/rust-bitvmx-broker).  
 It uses TLS certificates for authentication and public key based identifiers to establish secure channels between nodes.  
 
-The main entry point is the `Handler`, which offers a simple API for sending and receiving data, while the internal `Broker` manages certificates, storage, and routing.
+The main entry point is the `OperatorComms`, which offers a simple API for sending and receiving data, while the internal `Broker` manages certificates, storage, and routing.
 
 
 
@@ -24,7 +24,7 @@ It is not production-ready, has not been audited, and future updates may introdu
 - 🛑 **Graceful shutdown** via `stop()`  
 
 ## Methods  
-The `P2pHandler` provides several methods to manage direct communication between operators:
+The `OperatorComms` provides several methods to manage direct communication between operators:
 
 - **new**: Creates a new handler bound to a socket address with a private key, allowlist, and routing table.  
 
@@ -43,7 +43,7 @@ The `P2pHandler` provides several methods to manage direct communication between
 
 ## Usage
 
-`P2pHandler` lets peers exchange messages over a TLS-based point-to-point channel.  
+`OperatorComms` lets peers exchange messages over a TLS-based point-to-point channel.  
 Peers are identified by their public key hash, and only allowed peers can communicate.
 
 ```rust
@@ -69,18 +69,18 @@ fn main() {
             .unwrap()
             .add_route(identifier1.clone(), identifier2);
 
-        // Initialize P2P handlers
-        let mut p2p1 =
-            P2pHandler::new(addr1, &privk1, allow_list.clone(), routing.clone()).unwrap();
-        let mut p2p2 = P2pHandler::new(addr2, &privk2, allow_list.clone(), routing).unwrap();
+        // Initialize Operator Comms
+        let mut comms1 =
+            OperatorComms::new(addr1, &privk1, allow_list.clone(), routing.clone()).unwrap();
+        let mut comms2 = OperatorComms::new(addr2, &privk2, allow_list.clone(), routing).unwrap();
 
         let msg = b"hello peer2".to_vec();
 
         // Peer1 sends message to peer2
-        p2p1.send(&pubk_hash2, addr2, msg.clone()).unwrap();
+        comms1.send(&pubk_hash2, addr2, msg.clone()).unwrap();
 
         // Peer2 receives the message
-        match p2p2.check_receive() {
+        match comms2.check_receive() {
             Some(ReceiveHandlerChannel::Msg(from_id, data)) => {
                 assert_eq!(from_id, identifier1);
                 assert_eq!(data, msg);
@@ -89,8 +89,8 @@ fn main() {
         }
 
         // Close the brokers
-        p2p1.stop().unwrap();
-        p2p2.stop().unwrap();
+        comms1.stop().unwrap();
+        comms2.stop().unwrap();
 }
 
 ## Contributing
