@@ -1,12 +1,15 @@
 use crate::broker::Broker;
 use crate::helper::*;
-pub use bitvmx_broker::identification::{allow_list::AllowList, routing::RoutingTable};
-use bitvmx_broker::rpc::tls_helper::get_pubk_hash_from_privk;
+pub use bitvmx_broker::{
+    identification::{allow_list::AllowList, routing::RoutingTable},
+    rpc::tls_helper::get_pubk_hash_from_privk,
+};
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
 use tracing::{error, info};
+
 pub struct OperatorComms {
     broker: Broker,
 }
