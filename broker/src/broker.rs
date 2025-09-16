@@ -44,7 +44,7 @@ impl Broker {
         let cert = Cert::from_key_file(privk)?;
         let pubk_hash = cert.get_pubk_hash()?;
         let broker_config =
-            BrokerConfig::new(address.port(), Some(address.ip()), pubk_hash.clone())?;
+            BrokerConfig::new(address.port(), Some(address.ip()), pubk_hash.clone());
         let broker = BrokerSync::new(
             &broker_config,
             broker_storage.clone(),
@@ -77,7 +77,7 @@ impl Broker {
         data: String,
     ) -> Result<(), BrokerError> {
         // It doesnt check address when sending data, only when receiving
-        let server_config = BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone())?;
+        let server_config = BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone());
         let channel =
             DualChannel::new(&server_config, self.cert.clone(), None, self.address, None)?;
         channel.send_server(data.clone())?;
