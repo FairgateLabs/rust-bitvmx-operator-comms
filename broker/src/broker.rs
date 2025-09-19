@@ -22,6 +22,7 @@ pub struct Broker {
     // local_channel: LocalChannel<MemStorage>,
     cert: Cert,
     address: SocketAddr,
+    allow_list: Arc<Mutex<AllowList>>,
 }
 
 impl Broker {
@@ -49,14 +50,13 @@ impl Broker {
             &broker_config,
             broker_storage.clone(),
             cert.clone(),
-            allow_list,
+            allow_list.clone(),
             routing,
         )?;
         let local_channel = LocalChannel::new(
             Identifier {
                 pubkey_hash: pubk_hash.clone(),
-                id: Some(COMMS_ID),
-                address,
+                id: COMMS_ID,
             },
             broker_storage.clone(),
         );
@@ -66,6 +66,7 @@ impl Broker {
             local_channel: Some(local_channel),
             cert,
             address,
+            allow_list,
         })
     }
 
@@ -78,8 +79,12 @@ impl Broker {
     ) -> Result<(), BrokerError> {
         // It doesnt check address when sending data, only when receiving
         let server_config = BrokerConfig::new(dest_port, dest_ip, dest_pubk_hash.clone());
-        let channel =
-            DualChannel::new(&server_config, self.cert.clone(), None, self.address, None)?;
+        let channel = DualChannel::new(
+            &server_config,
+            self.cert.clone(),
+            None,
+            self.allow_list.clone(),
+        )?;
         channel.send_server(data.clone())?;
         info!("Send data {:?} to broker with id {}", data, dest_pubk_hash);
         Ok(())

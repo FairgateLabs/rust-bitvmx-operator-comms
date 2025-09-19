@@ -109,7 +109,10 @@ mod tests {
     use crate::broker::COMMS_ID;
 
     use super::*;
-    use bitvmx_broker::{identification::identifier::Identifier, rpc::tls_helper::Cert};
+    use bitvmx_broker::{
+        identification::{identifier::Identifier, routing::WildCard},
+        rpc::tls_helper::Cert,
+    };
     use std::net::{IpAddr, Ipv4Addr};
     use tracing_subscriber::{
         fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter,
@@ -137,8 +140,7 @@ mod tests {
         fn get_identifier(&self) -> Identifier {
             Identifier {
                 pubkey_hash: self.pubk_hash.clone(),
-                id: Some(COMMS_ID),
-                address: self.address,
+                id: COMMS_ID,
             }
         }
     }
@@ -416,7 +418,7 @@ mod tests {
         let result = comms1.send(&peer2.pubk_hash, peer2.address, b"hello peer2".to_vec());
         assert!(matches!(result, Err(OperatorCommsError::BrokerError(_))));
         let result = comms2.send(&peer1.pubk_hash, peer1.address, b"hello peer1".to_vec());
-        assert!(matches!(result, Ok(_))); // This is ok because although peer1 is not in the allow list, is the server (so it was automatically added to the allow list)
+        assert!(matches!(result, Err(OperatorCommsError::BrokerError(_))));
 
         add_allow_list(allow_list.clone(), vec![peer1.clone()]);
 
@@ -527,8 +529,8 @@ mod tests {
         let cert2 = Cert::from_key_file(privk2).unwrap();
         let pubk_hash1 = cert1.get_pubk_hash().unwrap();
         let pubk_hash2 = cert2.get_pubk_hash().unwrap();
-        let identifier1 = Identifier::new_local(pubk_hash1, 0, 20000);
-        let identifier2 = Identifier::new_local(pubk_hash2.clone(), 0, 20001);
+        let identifier1 = Identifier::new(pubk_hash1, 0);
+        let identifier2 = Identifier::new(pubk_hash2.clone(), 0);
 
         // Add peers to allow list and routing table
         let allow_list =
@@ -537,7 +539,7 @@ mod tests {
         routing
             .lock()
             .unwrap()
-            .add_route(identifier1.clone(), identifier2);
+            .add_route(identifier1.clone(), identifier2, WildCard::No);
 
         // Initialize comms handlers
         let mut comms1 =
