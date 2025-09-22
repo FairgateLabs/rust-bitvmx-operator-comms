@@ -57,8 +57,8 @@ fn main() {
         let cert2 = Cert::from_key_file(privk2).unwrap();
         let pubk_hash1 = cert1.get_pubk_hash().unwrap();
         let pubk_hash2 = cert2.get_pubk_hash().unwrap();
-        let identifier1 = Identifier::new_local(pubk_hash1, 0, 20000);
-        let identifier2 = Identifier::new_local(pubk_hash2.clone(), 0, 20001);
+        let identifier1 = Identifier::new(pubk_hash1, 0);
+        let identifier2 = Identifier::new(pubk_hash2.clone(), 0);
 
         // Add peers to allow list and routing table
         let allow_list =
