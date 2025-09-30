@@ -1,5 +1,5 @@
 [package]
-name = "operator_comms"
+name = "bitvmx-operator-comms"
 version = "0.0.2"
 edition = "2021"
 description = "BitVMX Operator Comms"
