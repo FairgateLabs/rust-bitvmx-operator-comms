@@ -1,10 +1,10 @@
 [package]
 name = "operator_comms"
-version = "0.1.0"
+version = "0.0.2"
 edition = "2021"
 description = "BitVMX Operator Comms"
 keywords = ["BitVMX", "Operator", "Comms"]
-repository = "https://github.com/FairgateLabs/rust-fakep2p"
+repository = "https://github.com/FairgateLabs/rust-bitvmx-operator-comms"
 readme = "README.md"
 
 [workspace]

@@ -1,6 +1,6 @@
 [package]
 name = "broker"
-version = "0.1.0"
+version = "0.0.2"
 edition = "2021"
 
 [dependencies]
@@ -11,10 +11,10 @@ serde_json = "1.0.64"
 serde_yaml = "0.9.33"
 hex = "0.4.3"
 anyhow = "1.0.98"
-bitvmx-broker = { path = "../../rust-bitvmx-broker", features = [
+bitvmx-broker = { git = "https://github.com/FairgateLabs/rust-bitvmx-broker.git", branch = "v.0.0.2", features = [
     "storagebackend",
 ] }
-rust-bitvmx-storage-backend = { path = "../../rust-bitvmx-storage-backend" }
+rust-bitvmx-storage-backend = { git = "https://github.com/FairgateLabs/rust-bitvmx-storage-backend.git", branch = "v.0.0.2" }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
