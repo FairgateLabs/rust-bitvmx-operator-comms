@@ -1,9 +1,6 @@
 use crate::broker::Broker;
 use crate::helper::*;
-pub use bitvmx_broker::{
-    identification::{allow_list::AllowList, routing::RoutingTable},
-    rpc::tls_helper::get_pubk_hash_from_privk,
-};
+pub use bitvmx_broker::identification::{allow_list::AllowList, routing::RoutingTable};
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
@@ -82,13 +79,6 @@ impl OperatorComms {
     pub fn stop(&mut self) -> Result<(), OperatorCommsError> {
         self.broker.close();
         Ok(())
-    }
-
-    // Private Key in PEM format
-    pub fn get_pubk_hash_from_privk(privk: &str) -> Result<PubKeyHash, OperatorCommsError> {
-        let pk_hash = get_pubk_hash_from_privk(privk)
-            .map_err(|e| OperatorCommsError::BrokerError(e.to_string()))?;
-        Ok(pk_hash)
     }
 
     pub fn get_pubk_hash(&self) -> Result<PubKeyHash, OperatorCommsError> {
