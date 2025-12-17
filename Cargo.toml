@@ -11,9 +11,6 @@ readme = "README.md"
 resolver = "1"
 members = ["broker"]
 
-[features]
-default = ["broker-impl"]
-broker-impl = ["broker"]
 
 [dependencies]
-broker = { path = "broker", optional = true }
+broker = { path = "broker" }
