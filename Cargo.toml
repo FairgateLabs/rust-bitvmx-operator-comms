@@ -8,14 +8,12 @@ repository = "https://github.com/FairgateLabs/rust-bitvmx-operator-comms"
 readme = "README.md"
 
 [workspace]
-resolver = "2"
-members = ["memory", "broker"]
+resolver = "1"
+members = ["broker"]
 
 [features]
 default = ["broker-impl"]
-memory-impl = ["memory"]
 broker-impl = ["broker"]
 
 [dependencies]
-memory = { path = "memory", optional = true }
 broker = { path = "broker", optional = true }
