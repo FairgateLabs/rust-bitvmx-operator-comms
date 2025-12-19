@@ -1,16 +1,3 @@
-[package]
-name = "bitvmx-operator-comms"
-version = "0.0.2"
-edition = "2021"
-description = "BitVMX Operator Comms"
-keywords = ["BitVMX", "Operator", "Comms"]
-repository = "https://github.com/FairgateLabs/rust-bitvmx-operator-comms"
-readme = "README.md"
-
 [workspace]
-resolver = "1"
+resolver = "2"
 members = ["broker"]
-
-
-[dependencies]
-broker = { path = "broker" }
