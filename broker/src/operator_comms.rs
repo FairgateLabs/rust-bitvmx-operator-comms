@@ -1,5 +1,6 @@
 use crate::broker::Broker;
 use crate::helper::*;
+use bitvmx_broker::identification::identifier::PubkHash;
 pub use bitvmx_broker::identification::{allow_list::AllowList, routing::RoutingTable};
 use std::{
     net::SocketAddr,
@@ -10,8 +11,6 @@ use tracing::{error, info};
 pub struct OperatorComms {
     broker: Broker,
 }
-
-pub type PubKeyHash = String;
 
 impl OperatorComms {
     pub fn new(
@@ -57,7 +56,7 @@ impl OperatorComms {
 
     pub fn send(
         &self,
-        pubk_hash: &PubKeyHash,
+        pubk_hash: &PubkHash,
         address: SocketAddr,
         data: Vec<u8>,
     ) -> Result<(), OperatorCommsError> {
@@ -81,7 +80,7 @@ impl OperatorComms {
         Ok(())
     }
 
-    pub fn get_pubk_hash(&self) -> Result<PubKeyHash, OperatorCommsError> {
+    pub fn get_pubk_hash(&self) -> Result<PubkHash, OperatorCommsError> {
         self.broker
             .get_pubk_hash()
             .map_err(|e| OperatorCommsError::BrokerError(e.to_string()))

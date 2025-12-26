@@ -1,7 +1,11 @@
 use bitvmx_broker::{
     broker_storage::BrokerStorage,
     channel::channel::{DualChannel, LocalChannel},
-    identification::{allow_list::AllowList, identifier::Identifier, routing::RoutingTable},
+    identification::{
+        allow_list::AllowList,
+        identifier::{Identifier, PubkHash},
+        routing::RoutingTable,
+    },
     rpc::{errors::BrokerError, sync_server::BrokerSync, tls_helper::Cert, BrokerConfig},
 };
 // use bitvmx_broker::broker_memstorage::MemStorage;
@@ -11,8 +15,6 @@ use std::{
 };
 use storage_backend::{storage::Storage, storage_config::StorageConfig};
 use tracing::info;
-
-use crate::operator_comms::PubKeyHash;
 
 pub const COMMS_ID: u8 = 0; // Default ID for communication
 
@@ -107,7 +109,7 @@ impl Broker {
         }
     }
 
-    pub fn get_pubk_hash(&self) -> Result<PubKeyHash, BrokerError> {
+    pub fn get_pubk_hash(&self) -> Result<PubkHash, BrokerError> {
         let pubk_hash = self.cert.get_pubk_hash()?;
         Ok(pubk_hash)
     }
